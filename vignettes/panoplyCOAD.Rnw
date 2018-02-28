@@ -1,0 +1,617 @@
+\RequirePackage{fancyvrb}
+
+%\VignetteIndexEntry{panoplyCOAD}
+%\VignetteDepends{panoply}
+%\VignettePackage{panoply}
+
+%%  standaord document setting for a report
+\documentclass[11pt, letterpaper, twoside]{article}
+
+\usepackage{Sweave}
+\usepackage{fullpage}
+\usepackage[landscape]{geometry}
+\usepackage{longtable}
+\usepackage{fullpage} 
+\usepackage{hyperref}
+\usepackage{xcolor}            % specify colors by name (e.g. "red")
+\hypersetup{
+backref=true,
+pagebackref=true,
+hyperindex=true,
+breaklinks=true,
+colorlinks=true,%linkcolor=black,
+urlcolor=blue,
+bookmarks=true,
+bookmarksopen=false,
+}
+\setlength{\textwidth}{10in}
+%\setlength{\textheight}{8in}
+\setlength{\oddsidemargin}{-.5in}
+\setlength{\evensidemargin}{-.5in}
+
+\newcommand{\multilineR}[1]{\begin{tabular}[b]{@{}r@{}}#1\end{tabular}}
+\newcommand{\multilineL}[1]{\begin{tabular}[b]{@{}l@{}}#1\end{tabular}}
+\newcommand{\multilineC}[1]{\begin{tabular}[b]{@{}c@{}}#1\end{tabular}}
+
+\usepackage{subfigure}
+\pagestyle{myheadings} 
+
+<<setup1, eval=TRUE, echo=FALSE>>=
+options(stringsAsFactors=FALSE)
+userWarnOpt <- getOption("warn")
+options(warn=-1)
+
+
+patient<-"TCGA-AA-3488"
+patientcat <- gsub("_","-",patient)
+
+@ 
+
+<<panSettings, eval=TRUE, echo=FALSE>>=
+pct.dna <- .3
+tailPct <- .2
+tailEnd <- "upper"
+netpmax <- .3
+drivEventOnly <- FALSE
+minDrugTargets <- 1
+minPathSize <- 5
+minPathPct <- .01
+@ 
+\title{PANOPLY \\ {\bf P}recision C{\bf a}ncer Ge{\bf no}mic Re{\bf p}ort: Single Samp{\bf l}e Inventor{\bf y}  \\  Patient \Sexpr{patientcat}}
+
+\author{Package Vignette \\ 
+PANOPLY: COAD from TCGA}
+\date{\today}  %% empty date
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+
+\maketitle
+%\tableofcontents
+\section{Objective}
+
+Identify the best drug targets based on the pre-drug tumor genomic sequencing data, using data from cancer patients.  
+Tumor-specific drug targets for the patient can be found with the following steps:
+
+\begin{enumerate} 
+ \item Identify 4 or more reference samples that serve as matched controls. That is, they have similar 
+   phenotypic characteristics (subtype, age), but had pathological complete response, and did not recur.
+ \item Identify the single-gene genomic events in the major cancer genes for the patient and compare them to
+   the genomic events for the matched controls. List drug targets for genes of interest for the patient.
+ \item Identify key pathway-based genomic features that are over or under-expressed in this patient versus 
+   normal tissue samples.
+ \item Identify key drugs that target the most over or under-expressed networks of genes linked 
+   by the genes the drugs target.
+ \item Plot and list pathways with possible drugs that target those pathways. 
+\end{enumerate}
+
+<<setup2,echo=FALSE>>=
+#.libPaths(c("~/R/x86_64-unknown-linux-gnu-library/3.4/",.libPaths()))
+.libPaths(c("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/applications/Rlib342", .libPaths()))
+library(panoply)
+library(randomForest)
+library(RColorBrewer)
+library(Rgraphviz)
+data(clinPanCO)
+data(genelistPan)
+data(cnaPanCO)
+data(gcPanCO)
+data(gcinfoPan)
+#data(variantPanTNBC)
+#data(dgidbPan)
+data(drugdbPan)
+data(reactome)
+#data(dgiSets)
+#data(dgiBCPan)
+#data(esnvPanTNBC)
+#load("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/analyses/manuscripts/panoply/panpkg/data/dgiCancerPan.RData")
+data(reactome)
+
+#load
+drivergenes <- genelistPan$GeneSymbol[genelistPan$AllLists & genelistPan$reactome]
+
+treatgenes <- NULL
+
+addtorow <- list(pos=list(-1,0), 
+        command=c("\\hline ",     
+        paste("\\endhead ", ## tell longtable to call the rows before this the header
+              "\\multicolumn{1}{r}{(cont'd next page)}", # {9}{p{10cm}}{(continued on next page)} \\\\ ", 
+              "\\endfoot",   # call the above line the footer
+              "\\endlastfoot",sep='\n'))) # with no line above this, makes an empty last footer
+@
+
+\section{Clinical Data}
+
+<<clinical, echo=FALSE, eval=TRUE, results=tex>>=
+clinPanCO$Days_Followup<- ifelse(clinPanCO$vital_status=="DECEASED",clinPanCO$days_to_death,
+                          ifelse(clinPanCO$vital_status=="LIVING",clinPanCO$days_to_last_followup,NA))
+clin <- clinPanCO[clinPanCO$bcr_patient_barcode==patient,]
+@ 
+
+Patient \Sexpr{patientcat} has the following clinical features:
+
+\begin{itemize}
+ \item Age: \Sexpr{clin$age_at_initial_pathologic_diagnosis}
+ \item Vital Status:  \Sexpr{clin$vital_status}
+ \item Days of Follow up: \Sexpr{clin$Days_Followup}
+ \item Lymphatic Invasion: \Sexpr{clin$lymphatic_invasion}   
+ \item Tumor Stage: \Sexpr{clin$tumor_stage}
+ \item Num 1st degree affected relatives: \Sexpr{clin$number_of_first_degree_relatives_with_cancer_diagnosis}  
+ \item Loss Exp. Mismatch Repair IHC: \Sexpr{clin$loss_expression_of_mismatch_repair_proteins_by_ihc}
+\end{itemize}
+
+Matched controls (Alive and Tumor Free for >200 days) were matched on tumor stage (>=2). 
+
+The patients and the matched characteristics are shown in Table~\ref{matchtab}, where the first row is the patient
+for whom this report is generated.
+
+\renewcommand{\tabcolsep}{0.1cm}
+<<matchedClin, results=tex, echo=FALSE>>=
+match.index <- which(clinPanCO$bcr_patient_barcode %in% c("TCGA-AZ-4315","TCGA-A6-3808","TCGA-CM-4747","TCGA-A6-3810","TCGA-CM-4748"))
+#match.index <- which(clinPanCO$Vital.Status=="Alive" & clinPanCO$PatientID!=patient & clinPanCO$age_at_diagnosis>60 & clinPanCO$age_at_diagnosis<=70 & clinPanCO$T.stage >= 2 & clinPanCO$N.stage != "N2" & clinPanCO$ndays > 1000)
+
+matchcols <- c("bcr_patient_barcode","vital_status","age_at_initial_pathologic_diagnosis","Days_Followup","tumor_stage","lymphatic_invasion","number_of_first_degree_relatives_with_cancer_diagnosis")
+                
+                    
+xclinmatched <- xtable(rbind(clin[,matchcols],clinPanCO[match.index,matchcols]), display=c("s","s","s","d","d","s","s","d"),caption="Patient and Matched Controls",label="matchtab")
+names(xclinmatched) <- c("Patient","Vital Status","Age","Days-Followup","Stage","Lymphatic Invasion","Num. 1st degree rel.")
+print(xclinmatched, include.rownames=FALSE,caption.placement="top")
+ptmatch <- clinPanCO[match.index,"bcr_patient_barcode"]
+@
+
+\clearpage
+
+\section{Single-Gene Events}
+
+The first focus is to assemble a list of genomic events in genes that are identified as possibly druggable
+targets. The events we report may be any of these for a gene in the list of targetable genes:
+\begin{itemize}
+  \item Copy number gain or loss in germline or tumor
+  \item RNA gene with over- or under-expression
+\end{itemize}
+
+
+\subsection{Copy Number (CN) Events}
+
+<<setcncut, echo=FALSE>>=
+#data(DNAtumorpct)
+#load("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/analyses/manuscripts/panoply/data/cnaPan.RData")
+#pct.dna <- clin$tumorpct
+tumorpct.clin <- clin$tumorpct
+#pct.dna <- .4
+cncut1 <- log2((2*(1-pct.dna)+1*pct.dna)/2)
+cncut3 <- log2((2*(1-pct.dna)+3*pct.dna)/2)
+cncut.match1 <- log2((2*(1.-xclinmatched$tumorpct/100)+1*(xclinmatched$tumorpct/100))/2)[-1]
+cncut.match3 <- log2((2*(1.-xclinmatched$tumorpct/100)+3*(xclinmatched$tumorpct/100))/2)[-1]
+
+@ 
+
+In this section we report copy number events for any gene in the target list.  This is limited to any copy event
+with log2ratio > \Sexpr{round(cncut3,2)} for copy gain, or log2ratio < \Sexpr{round(cncut1,2)} for copy loss. The ability to detect 
+copy levels for the sample at this level depends on the tumor percentage, or tumor purity.  These cutoffs for gain and loss 
+correspond to tumor percentage \Sexpr{round(pct.dna,2)}. Most samples in this set meet or exceed that tumor percentage. \\
+
+To help decipher the importance of the copy number events, the column named {\sl Count.Matched} is the count of 
+the number of times the matched controls have a gain in the same gene if the patient of interest has a gain, 
+or likewise a loss. Since there are large number of copy number events for some subjects, and they are common across
+cancer samples, we limit the table below to just those that are in less than half the matched patients.
+
+<<cnaClin, echo=FALSE, eval=TRUE, results=tex>>=
+## cna/v
+#cnv <- getCNV(set=c(patient, ptmatch))
+#cna <- getCNA(set=c(patient, ptmatch))
+cnaPanCO <- cnaPanCO[,c(colnames(cnaPanCO)[1:5],patient, ptmatch)]
+## one way to view CN levels
+## par(mfrow=c(3,3), mar=c(1,2,2,0))
+## for(ex in exset) plot(x=1:ncna, ylim=c(-3,3),y=sort(getCNA(set=ex)[,5]), main=paste(ex, ": CNA levels", sep=""),pch="-")
+
+cnidx <- which(cnaPanCO[,patient] <= cncut1 | cnaPanCO[,patient] >= cncut3)
+if(length(cnidx)==0) {
+  ## put at least the most extreme CN region in
+  cnidx <- which(abs(cnaPanCO[,patient]) == max(abs(cnaPanCO[,patient])))
+}
+  
+cngene <- cnaPanCO[cnidx,1:6]
+cngene <- cngene[order(cngene[,patient], decreasing=TRUE),]
+cngene$Count.Matched <- 0
+for(k in 1:nrow(cngene)) {
+  ## old: cngene$Count.Matched[k] <- sum(abs(cnaPanCO[cnaPanCO$Gene.Symbol == cngene[k,'Gene.Symbol'],7:ncol(cnaPanCO)])>cncut)
+  if(cngene[k,6]>0) {
+    cngene$Count.Matched[k] <- sum(cnaPanCO[cnaPanCO$Gene.Symbol == cngene[k,'Gene.Symbol'],7:ncol(cnaPanCO)] >= 
+                                   cncut3)
+  } else {
+    cngene$Count.Matched[k] <- sum(cnaPanCO[cnaPanCO$Gene.Symbol == cngene[k,'Gene.Symbol'],7:ncol(cnaPanCO)] <= 
+                                   cncut1)
+  }
+}
+cngene.full <- cngene
+cngene <- cngene[cngene$Count.Matched < length(ptmatch)/2,]
+#dim(cngene.full); dim(cngene)
+cngene$Count.Matched <- paste(cngene$Count.Matched, "/", length(ptmatch),sep="")
+cngene$Signal <- ifelse(cngene[,patient] > 0, "AMP", "DEL")
+  
+## bed format with scores for Circos
+cnbed <-cngene[,c("CHROM","START","STOP","Gene.Symbol",patient)]
+cnbed$gene_chr<- paste("chr",cnbed$CHROM,sep="")
+cnbed$Match.score <- (1-sapply(strsplit(cngene$Count.Matched, split="/"), function(x) as.numeric(x[1])/as.numeric(x[2])))
+  
+## make xtable
+#cngene <- cngene[order(cngene[,patient], decreasing=TRUE),c(5,4,ncol(cngene),6:7)]
+xcngene <-  xtable(cngene[order(cngene$Count.Matched),c(4,1,2,3,5,7,8,6)], digits=3,caption="Targetable CNA Regions of Visit 1 Tumor Sample")
+xcngene$Gene.Symbol <- paste0("\\href{http://atlasgeneticsoncology.org/Genes/GC\\_",xcngene$Gene.Symbol,".html}{",xcngene$Gene.Symbol,"}")
+   
+#write.table(cngene.full, file=paste("cngenes.", patient, ".txt",sep=""), row.names=FALSE,quote=FALSE, sep="\t")
+  
+    ##  print.xtable(xcngene)
+  print(xcngene,
+        tabular.environment="longtable",
+        caption.placement="top",
+        add.to.row=addtorow, 
+        include.rownames=FALSE,
+        sanitize.text.function=function(x){ gsub("Genes/GC..","Genes/GC_",gsub("&", "and",gsub("_",".",x)))},
+        floating=FALSE, include.colnames=TRUE, 
+        hline.after=c(-1:nrow(cngene)))
+   treatgenes <- data.frame(gene=tapply(cngene[,'Gene.Symbol'], cngene[,'Gene.Symbol'], function(x) x[1]), 
+                            CN=tapply(cngene[,patient],cngene[,'Gene.Symbol'],function(x) ifelse(x[1]>0,"Amp","Del")))   
+
+#treatgenes <- merge(treatgenes, data.frame(gene=tapply(cngene[,'Gene.Symbol'],cngene[,'Gene.Symbol'],function(x) x[1]), CN=tapply(cngene[,patient],cngene[,'Gene.Symbol'],function(x) ifelse(x[1]>0,"Amp","Del"))), by.x="gene", by.y="gene", all.x=TRUE, all.y=TRUE)
+    
+if(!any(names(treatgenes)=="CN")) {
+  treatgenes$CN <- ""
+}
+@ 
+\clearpage
+
+\subsection{RNA Gene Count Outliers}
+
+<<rnasetup, echo=FALSE, eval=TRUE, results=tex>>=
+## RNA 
+#tailPct <- .2
+tailEnd <- tailEnd
+gcPanCO <- gcPanCO[rownames(gcPanCO) %in% colnames(reactome.adj)[colSums(reactome.adj)>0],]
+  gcPanCO <- gcPanCO[order(rownames(gcPanCO)),]          
+zSubj <- gcPanCO[,grep(patient,colnames(gcPanCO)),drop=FALSE]
+zMatched <- gcPanCO[,colnames(gcPanCO) %in% ptmatch,drop=FALSE]
+#zcut <- sqrt(quantile(zSubj^2, .9))
+#zcut <- ifelse(tailEnd=="both",sqrt(quantile(zSubj^2,(1-tailPct/2))), sqrt(quantile(zSubj^2,(1-tailPct))))
+zcut <- ifelse(tailEnd=="both",sqrt(quantile(zSubj^2,(1-tailPct/2))), quantile(zSubj[,1],ifelse(tailEnd=="upper", 1-tailPct, tailPct)))
+
+@ 
+
+To find RNA genecounts in targetable genes that may be out of range, we use the normalized genecount of the
+patient's tumor sample gene expression. 
+
+To help determine the importance of the gene expression for the patient with recurrent tumor, we 
+include the minimum, maximum, and mean gene count of the matched control normalized samples. 
+In the output table, the {\sl Compare} column will have
+two minus (``-/-'') signs if the recurrent patient's sample is less than the minimum genecount of all 
+matched controls, ``-'' if less than the mean of the matched controls, and similarly one and two plus (``+'') 
+signs for being greater than the mean and maximum of the matched controls, respectively.
+
+Since the number of outlying genes per patient is large, we limit the results printed below to only those 
+with two minus (``-/-''), two plus (``+/+''), or are a driver gene of interest. 
+
+<<rnatable, results=tex, echo=FALSE>>=
+
+gc.zdf <- data.frame(gene=rownames(zSubj)[(zSubj) > zcut], 
+                     gcount=zSubj[(zSubj) > zcut],                  
+                     match.min=apply(zMatched[(zSubj) > zcut,],1,min,na.rm=TRUE),
+                     match.max= apply(zMatched[(zSubj) > zcut,],1,max,na.rm=TRUE),
+                     match.mean= apply(zMatched[(zSubj) > zcut,],1,mean,na.rm=TRUE))
+
+##  gc.zdf <- gc.zdf[gc.zdf$gene %in% targetlist,]
+gc.zdf$Compare <- ifelse(gc.zdf[,2] >= gc.zdf$match.max, "+/+", ifelse(gc.zdf[,2] <= gc.zdf$match.min, "-/-", ifelse(gc.zdf[,2] >= gc.zdf$match.mean, "+", "-")))
+gc.zdf$UPDOWN <- ifelse(gc.zdf[,2]> mean(gcPanCO[,patient]), "UP", "DOWN")
+#drivergenes <- genelistPan$GeneSymbol[genelistPan$AllLists]
+gc.zdf$Driver <- ifelse(gc.zdf$gene %in%  genelistPan$GeneSymbol[genelistPan$AllLists], "YES","NO")
+
+#gc.zdf <- gc.zdf[gc.zdf$Compare %in% c("-/-", "+/+") | gc.zdf$Driver=="YES",]
+xgc.zdf <- xtable(gc.zdf[order(gc.zdf[,2], decreasing=TRUE),-which(colnames(gc.zdf)=="Driver")], caption="Targetable Expressed Genes with Matched Patient Comparison", digits=2)
+   xgc.zdf$gene <- paste0("\\href{http://atlasgeneticsoncology.org/Genes/GC\\_",xgc.zdf$gene,".html}{",xgc.zdf$gene,"}")
+## bed format for Circos
+#gcbed <- gc.zdf[,c("gene","zscore")]
+#gcbed <- merge(gcbed, gcinfoPan[,c("Gene.Symbol","CHROM","START")], by.x="gene",by.y="Gene.Symbol", all.x=TRUE, all.y=FALSE)
+#gcbed$Match.score <- ifelse(gc.zdf$zscore>= gc.zdf$match.max, 2, ifelse(gc.zdf[,2] <= gc.zdf$match.min, -2, ifelse(gc.zdf[,2] >= gc.zdf$match.mean, 1, -1)))
+
+print(xgc.zdf,
+      tabular.environment="longtable",
+      caption.placement="top",
+      add.to.row=addtorow, 
+      include.rownames=FALSE,
+      sanitize.text.function=function(x){gsub("Genes/GC..","Genes/GC_",gsub("_",".",x))},
+      floating=FALSE, include.colnames=TRUE, 
+      hline.after=c(-1:nrow(xgc.zdf)))  
+treatgenes <- merge(treatgenes, data.frame(gene=gc.zdf$gene, GE=gc.zdf$UPDOWN), by.x="gene", by.y="gene", all.x=TRUE, all.y=TRUE)
+
+if(!any(names(treatgenes)=="GE")) {
+  treatgenes$GE <- ""
+}
+@ 
+
+
+
+\section{Single Gene Targets}
+
+Of the single gene events indicated above, we show a table of which ones have a drug that argets them. 
+We keep a tally of what kind of genomic events occur per patient ({\bf S}=Somatic Variant, {\bf CN} = Copy Number, {\bf Expr}=Gene Expression) for the gene. 
+
+<<treatgenes, results=tex, echo=FALSE, eval=TRUE>>=
+#dgiBCPan$prop.p10 <- round(dgiBCPan$prop.p10,digits=3)
+targetdrugs <- drugdbPan[drugdbPan[,1] %in% treatgenes[,1],,drop=FALSE]
+targetdf <- merge(treatgenes, targetdrugs[,-grep("Drug",colnames(targetdrugs)),drop=FALSE], by.x="gene", by.y="Gene", all.x=TRUE)
+targetdf[,2:ncol(targetdf)][is.na(targetdf[,2:ncol(targetdf)])] <- "-"
+#targetdf[,2:6][is.na(targetdf[,2:6])] <- 0
+#targetdf[,2] <- as.character(targetdf[,2])
+#targetdf[,3] <- as.character(targetdf[,3])
+#targetdf[,4] <- as.character(targetdf[,4])
+#targetdf[,5] <- as.character(targetdf[,5])
+#targetdf[,6] <- as.character(targetdf[,6])
+colnames(targetdf)[1:3] <- c("Gene","CN","Expr")
+                                        #write.table(targetdf[order(targetdf[,"Prop.Eff.BC"],decreasing=TRUE),],file=paste("treatablegenes.",patient,".txt",sep=""))
+xtargetCondensed <- xtable(targetdf[order(targetdf[,"Gene"]),], caption="Single-Gene Event Drug Targets")
+   xtargetCondensed$Gene <- paste0("\\href{http://atlasgeneticsoncology.org/Genes/GC\\_",xtargetCondensed$Gene,".html}{",xtargetCondensed$Gene,"}")
+print(xtargetCondensed, tabular.environment="longtable",   caption.placement="top",  
+      add.to.row=addtorow, include.rownames=FALSE,
+      sanitize.text.function=function(x){gsub("Genes/GC..","Genes/GC_",gsub("&","",gsub("_",".",x)))},
+      floating=FALSE, include.colnames=TRUE, ##   sanitize.text.function=function(x){gsub("_",".",x)},
+      hline.after=c(-1:nrow(xtargetCondensed)))
+#print.xtable(xtargetdf)
+@ 
+\clearpage
+
+
+<<rforest, echo=FALSE>>=
+#variantgenes <- treatgenes[!is.na(treatgenes$Var),"gene"]
+cnagenes <-  treatgenes[!is.na(treatgenes$CN),"gene"]
+gegenes <-   treatgenes[,"gene"]
+
+#varRF <- rbind.data.frame(rep(1, length(variantgenes)))
+#colnames(varRF) <- paste0(variantgenes, "-var")
+#for(pt in ptmatch) {
+#  varRF <- rbind.data.frame(varRF, 1*(variantgenes %in% variantPanCO[variantPanCO$PatientID==pt,"Gene.Symbol"]))
+#}
+#rownames(varRF) <- c(patient, ptmatch)
+cnRF <- t(cnaPanCO[cnaPanCO$Gene.Symbol %in% cnagenes, c(patient, ptmatch)])
+colnames(cnRF) <- paste0(cnaPanCO[cnaPanCO$Gene.Symbol %in% cnagenes, "Gene.Symbol"],"-cn")
+
+gcRF <- t(gcPanCO[rownames(gcPanCO) %in% gegenes, c(patient, ptmatch)])
+colnames(gcRF) <- paste0(colnames(gcRF), "-expr")
+#brcanet <- colnames(reactome.adj)[reactome.adj["BRCA1",]>0]
+
+set.seed(100)
+rfout <- randomForest(x=cbind(cnRF, gcRF), y=c(rep(1, length(patient)), rep(2, length(ptmatch))), ntree=1000)
+RFimp <- data.frame(gene=rownames(rfout$importance), importance=rfout$importance)
+RFimp <- RFimp[order(RFimp[,2], decreasing=TRUE),]
+meanImp <- mean(RFimp[,2])
+RFimp <- RFimp[RFimp[,2] > mean(RFimp[,2]),]
+rfgraph <- paste0("RFgraph",patient,".png")
+png(rfgraph,height=10, width=10, units='in', res=300) 
+genesrfout <- row.names(rfout$importance)
+row.names(rfout$importance) <- NULL
+#def.mar <- par("mar")
+par(mar=c(3.1,4,3.1,1.1))
+varImpPlot(rfout, sort=T,main="Var Importance", n.var=100, cex=2)
+axis(2,las=1,at=c(100:1),labels=genesrfout[order(rfout$importance,decreasing=T)[1:100]],cex.axis=0.6)
+#lines(x=c(meanImp, meanImp), y=c(1,100), col="green", lty=2)
+invisible(dev.off())
+#par(mar=def.mar)
+@
+
+\subsection{Random Forest on Genomic Events}
+
+Figure~\ref{figRFimp} below shows what random forest determines from all of the drivers and expressed genes
+below as key classifiers for the patient versus the matched controls. The plot shows variable importance, which will be 
+used later to sift through the top gene networks.  There were a total of \Sexpr{length(rfout$importance)} 
+given to random forest, and we select \Sexpr{nrow(RFimp)} genes to help make sense of druggable gene networks. 
+  
+\begin{figure}[h]
+  \begin{center}
+ \includegraphics[width=14cm, height=10cm]{\Sexpr{rfgraph}} 
+ \caption{Random Forest Variable Importance}    
+  \label{figRFimp}
+   \end{center}
+\end{figure}
+\clearpage
+
+<<runGeneSets, echo=FALSE>>=
+## build drug gene set and adjacency objects
+data(drugdbPan)
+drugObjects <- annotateDrugs(drugdbPan)
+drug.gs <- drugObjects[[1]]
+drug.adj <- drugObjects[[2]]
+
+## pass reactome adjacency matrix (pre-built) to panGeneSets
+data(reactome)
+drivGenes <- panGeneSets(caseid=patient, controlid=ptmatch, eventOnly=drivEventOnly, variant=NULL, cna=cnaPanCO, gcount=gcPanCO, tumorpct=pct.dna, tailEnd=tailEnd, tailPct=tailPct, gene.adj=reactome.adj, drug.adj=drug.adj)
+
+## filter to best set, and order by p-values
+drivDrug.Filtered <- filterNetworks(drivGenes, netpmax=netpmax, minDrug=1, cancerDrug=FALSE)
+RFimp$Gene.Symbol <- ifelse(grepl("-",RFimp$gene),substr(RFimp$gene,1,regexpr("-",RFimp$gene)-1),RFimp$gene)
+
+## see where remaining driver genes and their connected genes show up in RFimp made above
+drivDrug.Filtered$RF.druggable <- drivDrug.Filtered$RF.match <- drivDrug.Filtered$RF.rank <- 0
+for(dr in 1:nrow(drivDrug.Filtered)) {
+  dg <- drivDrug.Filtered$Cancer.Gene[dr]
+  conngenes <- strsplit(drivDrug.Filtered[dr,"NetGenes"],split=",")[[1]]
+  cranks <- which(RFimp$Gene.Symbol %in% conngenes)#   c(colnames(reactome.adj)[reactome.adj[dg,]>0]))
+  if(length(cranks)>0) {
+    drivDrug.Filtered$RF.match[dr] <- length(cranks) #drivDrug.Filtered$Network[dr],2)  
+    drivDrug.Filtered$RF.rank[dr] <- min(cranks, na.rm=TRUE)
+    conngenes <- RFimp[cranks,'Gene.Symbol']
+    ##colnames(reactome.adj)[reactome.adj[dg,,drop=FALSE])>0]
+    drivDrug.Filtered$RF.druggable[dr] <- sum(conngenes %in% drugdbPan[,"Gene"]) #/drivDrug.Filtered$Network[dr],2)
+  }
+}
+
+drivDrug.Filtered <- drivDrug.Filtered[with(drivDrug.Filtered,order(Network.pval, decreasing=FALSE)),]
+#drugTable <- panDrugTable(drivDrug.Filtered, minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=minPathSize)
+
+set.seed(1000)
+drugTable <- panDrugSets(drivGenes, caseids=patient, controlids=ptmatch, gcount=gcPanCO,nsim=1000, gene.gs=reactome.gs, gene.adj=reactome.adj, drug.gs=drug.gs, drug.adj=drug.adj, tailEnd=tailEnd)
+
+## add RF.score
+drugTable$RF.Score <- 0
+for(k in 1:nrow(drugTable)) {
+  drugTable$RF.Score[k] <- sum(c(0,RFimp[RFimp$Gene.Symbol %in% drug.gs[[drugTable$Drug[k]]],"IncNodePurity"]))/drugTable$Network[k]
+}
+## filter to top drugs by meeting 3 rules:  
+## 1. targets at least one driver or over-expressed network gene
+## 2. RF.Score above 75th %ile (50th %ile is usually zero)
+## 3. PScore above 50th %ile
+quantRF <- quantile(drugTable$RF.Score, prob=0.75, na.rm=TRUE)
+quantPS <- quantile(drugTable$PScore, prob=.5, na.rm=TRUE)
+drugTable.unfiltered <- drugTable
+drugTable <- drugTable[with(drugTable, (N.Cancer.Genes>0 | N.Network.Genes>0) & RF.Score >= quantRF & PScore >= quantPS),]
+#drugTable <- drugTable[drugTable$N.Cancer.Genes>0 | drugTable$N.Network.Genes>0,]
+
+pathTable <- findPathways(drugTable[1:20,], minTargets=minDrugTargets, minPathPct=minPathPct)
+
+drivdf <- findDrivers(drivDrug.Filtered, patient, ptmatch, cna=cnaPanCO, variant=NULL, gcount=gcPanCO,max.control=length(ptmatch), tumorpct=pct.dna,tailEnd=tailEnd, tailPct=tailPct)
+
+ptcircos <- paste0("circos",patient, ".png")
+png(ptcircos,height=8, width=8, units='in', res=300)
+#source("../R/panCircos.R")
+set.seed(1000)
+                                  
+panCircos(drivGenes, drugTable[drugTable$N.Pathways>6,], caseids=patient,  variant=NULL, cnaPanCO, gcount=gcPanCO, gcinfo=gcinfoPan,
+      tailEnd=tailEnd,tailPct=tailPct, minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=)
+
+invisible(dev.off())
+ptgraph <- paste0("graph",patient,".png")
+png(ptgraph,height=8, width=8, units='in', res=300) 
+set.seed(1000)
+panGeneGraph(drivGenes, drugTable, ndrugs=4,ndrivers=40, minPathways=4)
+#panGraph(drivDrug.Filtered, id=patient, gcount=gcPanCO, tailPct=.4, tailEnd="both")
+invisible(dev.off())
+
+if(FALSE){
+save(list=c("drivGenes","drivDrug.Filtered","drugTable","ptmatch"),file=paste("panoply.",unlist(strsplit(patient,"-"))[[3]],".RData",sep=""))
+require(WriteXLS)
+WriteXLS(x=c("drivGenes","drivDrug.Filtered","drugTable","pathTable","drivdf"), 
+         ExcelFileName=paste0("panTables",patient,".xls"), 
+         SheetNames=c("Gene.Networks.Unfiltered","Gene.Networks.Filtered","Drug.Targets","Drug.Pathways","Driver.Genes"))
+}
+@ 
+
+\subsection*{Gene-Network Targets}
+
+Genes with DNA Mutation events that are in gene-specific networks that are significantly altered 
+compared to the matched controls.
+
+<<pathprint, echo=FALSE, results=tex>>=
+#colnames(drivDrug.Filtered) <- gsub("PathEvents","AdjGE", gsub("match.greater", "match", gsub("conn.pval", "MUT.Control.pval",gsub("noconn.pval","WT.Control.pval", gsub("prop.p10", "Prop.Eff.BC", colnames(drivDrug.Filtered))))))
+#drivDrug.Filtered$REACTOME <- gsub("R-HSA-","R-",substr(drivDrug.Filtered$REACTOME, 1, 35))
+#xDrug <- xtable(drivDrug.Filtered[, c("REACTOME","AdjGenes","p.match","DrivGene","Case.AdjGE","Cont.AdjGE","WT.Control.pval","MUT.Control.pval")], 
+#                display=c("d","s","d","f","s","d","d","f","f"))
+xDrug <- xtable(drivDrug.Filtered[, c("Cancer.Gene","Network","Network.pval","Total.Druggable","RF.match","RF.druggable")], 
+                display=c("d","s","d","f","d","d","d"),caption="Curated Cancer Networks")
+   xDrug$Cancer.Gene <- paste0("\\href{http://atlasgeneticsoncology.org/Genes/GC\\_",xDrug$Cancer.Gene,".html}{",xDrug$Cancer.Gene,"}")
+colnames(xDrug)[1] <- "Cancer.Driver.Gene"
+
+print.xtable(xDrug,
+     tabular.environment="longtable", caption.placement="top",     # add.to.row=addtorow, 
+      include.rownames=FALSE,  
+             sanitize.text.function=function(x){gsub("Genes/GC..","Genes/GC_",gsub("_",".",x))},
+      floating=FALSE, include.colnames=TRUE,
+      hline.after=c(-1:nrow(xDrug)))
+@ 
+\clearpage
+
+Single Gene Driver Events in those genes or variants.
+
+<<printdrivers, echo=FALSE, results=tex>>= 
+#if(nrow(drivdf)>12) {
+#  drivdf <- drivdf[drivdf$Gene.Symbol %in% unlist(strsplit(drugTable$Driver.Genes, split=",")),]
+#}
+## if merge in drug names and +/- GE, add two more columns to display vec
+xdrivers <- xtable(drivdf, display=c("s","d","s","s","d","s"),caption="DNA Driver Events")
+   xdrivers$Gene.Symbol <- paste0("\\href{http://atlasgeneticsoncology.org/Genes/GC\\_",xdrivers$Gene.Symbol,".html}{",xdrivers$Gene.Symbol,"}")
+print.xtable(xdrivers,  tabular.environment="longtable", caption.placement="top",
+      add.to.row=addtorow,  include.rownames=FALSE,
+      sanitize.text.function=function(x){gsub("Genes/GC..","Genes/GC_",gsub("_",".",x))},
+      floating=FALSE, include.colnames=TRUE, hline.after=c(-1:nrow(xdrivers)))
+@ 
+\clearpage
+ 
+\subsection*{Cancer Drugs and Pathways}
+
+Drugs that target the cancer genes and their network genes ranked by the drugs that target the 
+most in the remaining list of candidates.
+
+<<printdrugs, echo=FALSE, results=tex>>= 
+xdrugTable <- xtable(drugTable[,c("Drug","Cancer.Genes","Network.Genes","N.Pathways","Network.pval","ZSim.pval","PScore","RF.Score")], display=c("d","s","s","s","d","f","f","f","f"),caption="Cancer Drug Table",digits=4)
+
+#xdrugTable <- xdrugTable[with(xdrugTable, order(pmin(ZSim.pval,Network.pval))),]
+xdrugTable <- xdrugTable[with(drugTable, order(PScore,decreasing=T)),]
+xdrugTable[,"Network.Genes"] <- substr(xdrugTable[,"Network.Genes"], 1, 20)
+xdrugTable[,"Cancer.Genes"] <- substr(xdrugTable[,"Cancer.Genes"], 1, 20)
+#xdrugTable[,"Drug"] <- substr(xdrugTable[,"Drug"], 1, 15)
+xdrugTable$Drug <- paste0("\\href{http://dgidb.genome.wustl.edu/drugs/",xdrugTable$Drug,"}{",substr(xdrugTable$Drug,1,16),"}")
+colnames(xdrugTable)[2] <- c("Cancer.Driver.Genes")
+#gsub("\\.", " ", x)
+print.xtable(xdrugTable, tabular.environment="longtable", caption.placement="top",floating=FALSE,
+             sanitize.text.function=function(x){gsub("_",".",x)},
+             include.rownames=FALSE, hline.after=c(-1:nrow(xdrugTable)))
+ 
+@ 
+
+<<printpathranked, echo=FALSE, results=tex>>=
+pathTable <- pathTable[,c("Drug","Cancer.Genes","Network.Genes","Pathway","N.Genes","Druggable.Pct")]
+xpathTable <- xtable(pathTable, display=c("d","s","s","s","s","d","f"),caption="Drugs targetting multiple genomic events")
+xpathTable$Drug <- paste0("\\href{http://dgidb.genome.wustl.edu/drugs/",xpathTable$Drug,"}{",xpathTable$Drug,"}")
+#print.xtable(xpathTable, tabular.environment="longtable", floating=FALSE,
+#             sanitize.text.function=function(x){gsub("_",".",gsub("\\.", " ", x))},
+#             include.rownames=FALSE, hline.after=c(-1:nrow(xpathTable)))
+@ 
+\clearpage
+
+\subsection*{Visualization}
+
+We take two views of the patient's druggable gene targets and their networks.  
+First we show a circos plot of the driver gene events in outer bands, and gene expression events in the inner bands, colored blue if they are over- or under-expressed, and if one of the key drugs target them. Across the center circle, we show genes that are connected as the top cancer drivers connected to their druggable in-network genes.
+
+\begin{figure}[h]
+  \begin{center}
+ \includegraphics[width=14cm, height=10cm]{\Sexpr{ptcircos}} 
+\caption{Key driver genomic events connected to gene expression events}
+  \label{figCircos}
+   \end{center}
+\end{figure}
+\clearpage
+
+Next we show in a gene graph in Figure~\ref{figGraph} the driver gene networks for this patient that distinguishes their 
+tumor genomic activity as over-expressed as a likely direct result of the driver event within pathways.
+\begin{figure}[h]
+  \begin{center}
+ \includegraphics[width=14cm, height=10cm]{\Sexpr{ptgraph}} 
+\caption{Patient-specific cancer gene graph network}
+  \label{figGraph}
+   \end{center}
+\end{figure}
+\clearpage
+
+Drug Network View
+
+<<drugview, echo=FALSE>>=
+#source("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/analyses/manuscripts/panoply/panoply-build/R/panGraph.R")
+drugnetpt <- paste0("drugNetwork",patient, ".png")
+png(drugnetpt,height=15, width=18, units='cm', res=300)
+panDrugGraph(drugTable[drugTable$N.Pathways>6,], ndrugs=4)
+## minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=minPathSize, pathSource="reactome")
+invisible(dev.off())
+@ 
+\begin{figure}[h]
+  \begin{center}
+ \includegraphics[width=27cm, height=21cm]{\Sexpr{drugnetpt}} 
+ \caption{Drugs that target the most network genes and the affected pathways}
+   \end{center}
+\end{figure}
+\clearpage
+
+<<resetOptions, echo=FALSE>>=
+options(warn=userWarnOpt)
+@ 
+
+\end{document}
+
+

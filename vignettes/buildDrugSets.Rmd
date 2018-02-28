@@ -1,0 +1,132 @@
+---
+title: "Building Drug Gene Sets"
+author: "Jason Sinnwell"
+date: '`r format(Sys.time(),"%d %B, %Y")`'
+output:
+  rmarkdown::html_vignette:
+    toc: yes
+    toc_depth: 3
+vignette: |
+  %\VignetteIndexEntry{Building Drug Gene Sets}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+ 
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy.opts=list(width.cutoff=80), tidy=TRUE,  comment=NA)
+options(width=120, max.print=200)
+require(panoply)
+require(knitr)
+```
+
+
+Introduction
+=============
+
+Panoply is a method to assess possible gene or pathway targets for a single sample given
+genomic information from DNA and RNA. We provide this vignette to demonstrate how to set up
+Drug-Gene Data for prioritizing drugs for cancer patients based on genomic data.  
+
+
+Druggable Genome Interaction Database (DGIdb)
+=============================================
+
+We curated a set of high-confidence cancer-related genes and used the curl command line interface to download drug-gene interactions for cancer drugs (anti-neoplastic) on the sets of genes. Our gene set was too large to do at once, so we had to do the command in smaller chunks and paste together.  The example below shows how to do it for six well-known cancer genes, with a post-download step using python to convert to json format.
+  
+```{r, dgiCancerMake, eval=FALSE}
+#http://dgidb.genome.wustl.edu/api
+#curl http://dgidb.genome.wustl.edu/api/v1/interactions.json?drug_types=antineoplastic\&genes=TP53,HER2,ESR1,ATM,BRCA1,BRCA2 | python -mjson.tool
+```
+
+Next we use the RJSONIO package to load the json file into R. We show a small example of the values for the drug-gene ineraction downloaded from DGI.
+
+```{r, dgiRSJON, eval=FALSE}
+library(RJSONIO)
+file1 <- "dgiAntiNeo1.json"
+dgiAntiNeo1 <- fromJSON(paste(readLines(file1), collapse=""))
+
+#      Gene     Drug              interactionType            
+# [1,] "PRKCA"  "ELLAGIC ACID"    "inhibitor,competitive"    
+# [2,] "PRKCA"  "BRYOSTATIN-1"    "n/a"                      
+# [3,] "PRKCA"  "SOPHORETIN"      "inhibitor"                
+# [4,] "PRKCA"  "ENZASTAURIN"     "inhibitor"                
+# [5,] "PRKCA"  "MIDOSTAURIN"     "inhibitor"                
+# [6,] "PRKCA"  "AFFINITAC"       "antisense oligonucleotide"
+# [7,] "PRKCA"  "TAMOXIFEN"       "n/a"                      
+# [8,] "NOTCH1" "RO4929097"       "inhibitor"                
+# [9,] "NOTCH1" "RO4929097"       "other/unknown"        
+```
+
+Drug-Bank
+===============
+
+We also included drug-gene targets from Drug Bank. The steps included a web download
+and converting gene ids into gene symbols. A snippet of this data appears as follows:
+
+```{r, showDBank, eval=FALSE}
+#            Drug_name Drug_ID                         Target uniprot                       GeneID
+#             Afatinib DB08916 P00533; P04626; Q15303; P08183; Q9UNQ0 EGFR;ERBB2;ERBB4;ABCB1;ABCG2
+#          Aflibercept DB08885                 P15692; P49763; P49765              VEGFA;PGF;VEGFB
+#          Anastrozole DB01217         P11511; P05177; P11712; P08684 CYP19A1;CYP1A2;CYP2C9;CYP3A4
+#          Azacitidine DB00928                         P26358; P32320                    DNMT1;CDA
+```
+
+Combined Sources
+===================
+
+We show the steps needed to fix up both sources so they could be combined into one common
+data frame in R. First, fix column names and add the *Source* name for DGI. For Drug Bank,
+need to pull apart gene ids and expand the data.frame to one row per drug-gene pair.
+
+```{r, combineboth, eval=FALSE}
+## fix up dbi source for combining
+dgidb$Source <- "DGIdb"
+names(dgidb) <- gsub("interactionType", "type", names(dgidb))
+
+## fix up drugbank for combining
+dbank$DRUG <- casefold(dbank$Drug_name, upper=TRUE)
+
+udrugs.dgi <- unique(c(dgidb$Drug,dbank$DRUG))
+udrugs.dgi <- udrugs.dgi[!(grepl("\\[",udrugs.dgi) | grepl("\\{",udrugs.dgi) | grepl("\\(",udrugs.dgi))]
+
+glist <- strsplit(dbank$GeneID, split=";")
+dbankfix <- data.frame(Drug=NULL, Gene=NULL, type=NULL, Source=NULL)
+for(k in 1:nrow(dbank) ) {
+  if(length(glist[[k]])>0) {
+    dbankfix <- rbind.data.frame(dbankfix, data.frame(Drug=dbank$DRUG[k], Gene=glist[[k]], type="n/a", Source=dbank[k,"Annotation From"]))
+  }
+}
+drugdbPan <- rbind.data.frame(dgidb, dbankdf)
+```
+
+Create Data Objects for PANOPLY Network Analyses
+===================================================
+
+Using the pre-made dataset described above, drugdbPan, we  
+
+```{r, pandrugdata, eval=TRUE, results='asis'}
+data(drugdbPan)
+
+kable(head(drugdbPan, 20))
+
+annoDrugs <- annotateDrugs(drugdbPan)
+drug.gs <- annoDrugs[[1]]
+drug.adj <- annoDrugs[[2]]
+
+hist(sapply(drug.gs, length), main="Drug set length")
+hist(rowSums(drug.adj), main="Drug targets (genes) via adjacency")
+hist(colSums(drug.adj), main="Gene targets (from drugs) via adjacency")
+```
+
+Session Information
+=======================
+
+Show the R session information.
+
+```{r, rsession}
+sessionInfo()
+```
+
+
+

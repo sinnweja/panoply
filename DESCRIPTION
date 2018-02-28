@@ -1,0 +1,32 @@
+Package: panoply
+Title: Personalized Cancer Report
+Version: 0.97
+Date: 2018-02-16
+URL: http://bioinformaticstools.mayo.edu/research/panoply/
+Authors@R: c(
+    person("Jason", "Sinnwell", email = "sinnwell.jason@mayo.edu", role = c("aut", "cre")),
+    person("Krishna", "Kalari", role="aut"),
+    person("Kevin", "Thompson", role="aut"),
+    person("Erin", "Carlson", role="aut"),
+    person("Xiaojia", "Tang", role="ctb")
+  )
+Description: Personalized Cancer Report with prioritizing cancer drugs by the genomic networks they target.
+Suggests:
+	xtable,
+	knitr
+Depends:
+	R (>= 3.2.0),
+	stats,
+	MASS,
+	gage,
+	circlize,
+	Rgraphviz,
+	randomForest,
+	RColorBrewer
+Imports:
+	methods,
+	utils,
+	graphics,
+	grDevices	 
+VignetteBuilder: knitr
+License: GPL (>= 2)

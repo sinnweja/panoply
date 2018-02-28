@@ -1,0 +1,11 @@
+import(gage)
+import(MASS)
+importFrom("grDevices", "rgb")
+importFrom("graphics", "legend", "par", "plot", "title")
+importFrom("methods", "new")
+importFrom("stats", "median", "prop.test", "quantile", "rnorm", "sd")
+importFrom("utils", "data")
+## Export all names
+#exportPattern(".")
+export(panGeneGraph, panDrugGraph, panGeneSets, panDrugSets, panCircos, findDrivers,
+       findPathways, annotateDrugs, filterNetworks, drivDNA, outRNA)
