@@ -610,7 +610,7 @@ Drugs that target the cancer genes and their network genes ranked by the drugs t
 most in the remaining list of candidates.
 
 <<printdrugs, echo=FALSE, results=tex>>= 
-xdrugTable <- xtable(drugTable[,c("Drug","Cancer.Genes","Network.Genes","N.Pathways","Network.pval","ZSim.pval","PScore","RF.Score")], display=c("d","s","s","s","d","f","f","f","f"),caption="Cancer Drug Table",digits=4)
+xdrugTable <- xtable(drugTable[,c("Drug","Cancer.Genes","Network.Genes","N.Pathways","DNT.pval","DMT.pval","PScore","RF.Score")], display=c("d","s","s","s","d","f","f","f","f"),caption="Cancer Drug Table",digits=4)
 
 #xdrugTable <- xdrugTable[with(xdrugTable, order(pmin(ZSim.pval,Network.pval))),]
 xdrugTable <- xdrugTable[with(drugTable, order(PScore,decreasing=T)),]

@@ -102,12 +102,12 @@ panDrugSets(panGene, caseids, controlids, gcount, minTargets=1, minPathPct=.05, 
     drug}
  %% remove ZTail.stat and Perm.pval
   \item{Network: Number of genes directly targeted by the drug}
-  \item{Network.pval: p-value comparing gene expression
+  \item{DNT.pval: p-value comparing gene expression
     between caseids and controlids patients in the genes directly
     targeted by the drug}
-  \item{ZSim: Meta Z-statistic of combined gene networks for any gene
+  \item{DMT.Stat: Meta Z-statistic of combined gene networks for any gene
     targeted by the drug}
-  \item{ZSim.pval: p-value for Meta ZSim statistic, based on multiplying
+  \item{DMT.pval: p-value for DMT.Stat Z-statistic, based on multiplying
     s_i~N(0,1) by gene network test Z-statistics for i=1..nsim}  
   \item{Z.stat: Meta Z-statistic of combined gene networks for any gene
     targeted by the drug, weighted by number of genes targeted by the
@@ -139,6 +139,6 @@ drugResults <- panDrugSets(drivGenes, caseids=patient,
 controlids=ptmatch, gcount=gcPanTNBC,nsim=200, tailEnd="upper",
 drug.gs=dgi.gs, drug.adj=dgi.adj, gene.gs=reactome.gs, gene.adj=reactome.adj)
 
-drugResults[1:10,!grepl("^Pathways", names(drugResults))]
+drugResults[1:10,!grepl("^Pathway", names(drugResults))]
 }
 

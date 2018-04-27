@@ -33,12 +33,13 @@ panDrugSets <- function(panGene, caseids, controlids, gcount, minTargets=1, minP
  
   drugConnect <- panDrugConnect(caseids=caseids, controlids=controlids, gcount=gcount, gageCompare=gageCompare, tailEnd=tailEnd, drug.adj=drug.adj)
   drugTable <- merge(drugScores, drugConnect,by.x="Drug", by.y="Drug", all.x=TRUE, all.y=TRUE)
+  colnames(drugTable) <- gsub("ZSim.pval", "DMT.pval", gsub("Network.pval", "DNT.pval", gsub("Z.Meta", "DMT.Stat", colnames(drugTable))))
   ## Function to get ZSim where Z.stat compared to Z.stat.g*,
   ##     using Z.stat.g* = si x Zg i in 1..nsim
-  colnms <- c("Drug", "N.Cancer.Genes", "Cancer.Genes", "N.Network.Genes", "Network.Genes", "Network","Network.pval","Z.Meta",
-              "ZSim.pval", "PScore", "N.Pathways", "Pathways")
+  colnms <- c("Drug", "N.Cancer.Genes", "Cancer.Genes", "N.Network.Genes", "Network.Genes", "Network","DNT.pval","DMT.Stat",
+              "DMT.pval", "PScore", "N.Pathways", "Pathways")
   ## order by sum of log10(p) of two p-values
-  drugTable$PScore <- -1*log10(ifelse(drugTable$ZSim.pval==0,1/(2*nsim), drugTable$ZSim.pval)) - 1*log10(drugTable$Network.pval)
+  drugTable$PScore <- -1*log10(ifelse(drugTable$DMT.pval==0,1/(2*nsim), drugTable$DMT.pval)) - 1*log10(drugTable$DNT.pval)
   return(drugTable[with(drugTable, order(PScore,decreasing=TRUE)),colnms])
 }
 

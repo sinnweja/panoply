@@ -1,0 +1,289 @@
+
+---
+title: "PANOPLY User Manual"
+author: "Jason Sinnwell"
+date: '`r format(Sys.time(),"%d %B, %Y")`'
+output:
+  rmarkdown::html_vignette:
+    toc: yes
+    toc_depth: 3
+vignette: |
+  %\VignetteIndexEntry{PANOPLY User Manual}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+
+Introduction:
+===============
+
+This document shows the general steps used to run the tests 
+true positive rates (TPR) in the PANOPLY manuscript. The steps use the covariance
+structure or RNA expression from breast normal tissues to simulate random multivariate
+normal expression data for a case and a set of matched controls, where the case had higher
+mean expression in a subsest of genes that are in cancer networks targeted by a specific
+drug. To assess the impact of having DNA events as the cancer drivers of genomic networks
+that are targets of cancer drugs, we include DNA copy number events in specific driver genes
+and at random. The results from the complete simulations of 500 datasets (nsim=500)
+from each setting are summarized in the PANOPLY manuscript and supplementary methods.
+
+## Setup
+
+The first code chunk describes how we created the document using R-markdown, and loads the
+necessary R packages.
+
+```{r, setup, eval=TRUE,echo=TRUE}
+## to make this into a word document:
+## library(rmarkdown); render(filename.Rmd", output_format="word_document")
+options(stringsAsFactors=FALSE,width=140)
+library(knitr) ## contains kable
+library(MASS)  ## contains mvrnorm
+library(panoply) 
+
+```
+
+## Load Data
+
+Next, load the datasets from the PANOPLY package, and we create a covariance matrix from
+a normalized TCGA gene expression dataset that we will use to simulate random multivariate normal gene counts.
+The covariance matrix used in the initial manuscript for PANOPLY can be downloaded from
+http://kalarikrlab.org/Software/Panoply.html
+
+```{r loadSolid, eval=TRUE, echo=TRUE}
+data(gcPanCO)
+covGC <- cov(t(gcPanCO))
+
+## load("covSOLID.RData")
+## covGC <- covSOLID
+meanGC <- rep(0, ncol(covGC))
+names(meanGC) <- colnames(covGC)
+
+data(genelistPan)
+data(gcinfoPan)
+data(dgidbPan)
+data(reactome)
+data(dgiSets)
+
+```
+
+Examples
+==============
+
+## Simulation Settings
+
+The PANOPLY workflow allows for various settings to test cancer driver genes and cancer drugs.
+We first give settings that were used to control our published simulations, which includes
+the number of matched controls, the true positive drug name and associated gene drivers
+and network genes, the over-expression level to induce for those network genes in the case, and
+the number of DNA driver genes to simulate. Below are these variables with a short description
+in the comment on the same line.
+
+```{r, simsettings, echo=TRUE, eval=TRUE}
+
+## TPR drug/genes
+pickDrug <- "OLAPARIB"                    ## Drug considered the "true positive" 
+cnGenes <- c("ATR","BLM","BRCA1","CHEK2") ## cancer driver genes for Olaparib
+
+npt <- 9           ## 1 case and 8 matched controls
+sdExpress <- 2     ## gene-specific over-expression level in the case (sd of genes)
+n.dna.events <- 30 ## in addition to RNA drivers, number of random dna drivers (of total 429)
+```
+
+## Olaparib Gene Set for Simulations
+
+We define a set of genes that are differentially expressed because of a variant or copy number
+event in the driver genes set above (cnGenes) that are involved in cancer genomic
+networks with multiple genes targeted by Olaparib. Below, we select a set of 27 genes to
+be over-expressed because of a genomic event, which is based directly on the gene set annotation
+set curated for PANOPLY.
+
+```{r, makeGenesD, echo=TRUE, eval=TRUE, results='asis'}
+brca1 <- colnames(reactome.adj)[reactome.adj["BRCA1",]>0]
+chek2 <- colnames(reactome.adj)[reactome.adj["CHEK2",]>0]
+atr <- colnames(reactome.adj)[reactome.adj["ATR",]>0]
+blm <- colnames(reactome.adj)[reactome.adj["BLM",]>0]
+alltbl <- table(c(brca1, chek2,atr,blm))
+pickNetGenes <- names(alltbl)[alltbl>1]
+kable(data.frame(Genes.Olaparib=pickNetGenes))
+```
+
+## Algorithm settings
+
+These are algorithm settings for when running the driver gene and drug tests, which are
+arguments used in the two main functions: panGeneSets and panDrugSets. We list them below with a brief
+description in the comments.  
+
+```{r, algsettings}
+set.tailPct <- 0.2     ## pct of RNA genes in case (upper or lower tails) as "drivers" in DMT
+set.tailEnd <- "upper" ## direction of tail as RNA drivers (upper, lower, or both) 
+set.eventOnly=TRUE     ## in DMT, only use RNA+DNA driver events, if FALSE, uses all 429
+set.nsim=100           ## n-simulations for DMT p-value. We suggest using 1000 or more, but fewer here for run-time.
+```
+
+RNA Drivers Only
+====================
+
+We first ignore the DNA driver events and only analyze the RNA over-expressed
+genes for the simulated "case" as the driver events.  We show the DNT and DMT
+results for a small number of case-control datasets results for Olaparib,
+sorted by the P.Score for each simulation.  We see a moderate number of
+p-values significant at 0.05 for DMT, and fewer from DNT.
+
+```{r, rnaonly, echo=TRUE, eval=TRUE}
+meanGC <- rep(0, ncol(covGC))
+names(meanGC) <- colnames(covGC)
+meanGCcase <- meanGC
+sdDrGenes <- sqrt(diag(covGC[pickNetGenes,pickNetGenes])) * sdExpress
+meanGCcase[pickNetGenes] <- 0 + sdDrGenes
+
+set.seed(2000)
+
+gcSim1 <- mvrnorm(1, mu=meanGCcase, Sigma=covGC)
+gcSim8 <- mvrnorm(npt-1, mu=meanGC, Sigma=covGC)
+gcSim <- t(rbind(gcSim1, gcSim8))
+colnames(gcSim) <- paste("Null",1:npt,sep="_")
+
+i <- colnames(gcSim)[1]
+patient <- i
+ptmatch <- colnames(gcSim)[!(colnames(gcSim) %in% i)]
+
+driversRNA <- panGeneSets(caseids=patient,controlids=ptmatch,gcount=gcSim,
+                     tailPct=set.tailPct, tailEnd=set.tailEnd, eventOnly=set.eventOnly)
+
+kable(driversRNA[1:10,1:6], row.names=FALSE, caption="Differentially-Expressed Driver Gene Sets, RNA drivers")
+  
+drugRNA <- panDrugSets(driversRNA,caseids=patient, controlids=ptmatch,
+                 gcount=gcSim, gene.gs=reactome.gs,
+                 gene.adj=reactome.adj, drug.gs=dgi.gs, drug.adj=dgi.adj,
+                 minPathways=0, nsim = set.nsim, tailEnd = set.tailEnd)                    
+
+
+kable(drugRNA[1:15,1:10], row.names=FALSE, digits=3, caption="Drug Test Results, RNA-only")
+  
+```
+
+DNA Network Drivers 
+===============================================
+
+We now add DNA driver events to "turn on" the neighboring genes of cancer driver
+genes. Since internally the functions treat variant and copy number events equally
+as an "event", we simplify by simulating a copy number event. We simulate 30 random genes,
+plus four specific genes that have the over-expressed Olaparib-specific genes in
+their networks, which are ATM, CHEK2, BRCA2, and BLM.  
+
+```{r, drivers4, echo=TRUE, eval=TRUE}
+set.seed(2000)
+colnames(gcSim) <- paste("Null",1:npt,sep="_")
+
+i <- colnames(gcSim)[1]
+patient <- i
+ptmatch <- colnames(gcSim)[!(colnames(gcSim) %in% i)]
+cnSim <- data.frame(CHROM=1,Gene.Symbol=rownames(reactome.adj), 
+                 matrix(0, nrow=nrow(reactome.adj), ncol=npt))
+ 
+colnames(cnSim)[3:ncol(cnSim)] <- c(patient, ptmatch); 
+cnSim[sample(nrow(reactome.adj),n.dna.events),patient] <- 1
+cnSim[cnSim$Gene.Symbol %in% cnGenes,patient] <- 1
+
+drivRNADNA <- panGeneSets(caseids=patient,controlids=ptmatch,
+                        gene.adj=reactome.adj, drug.adj=dgi.adj,
+                        gcount=gcSim,cna=cnSim,tailPct=set.tailPct,
+                        tailEnd=set.tailEnd, eventOnly=set.eventOnly)
+kable(drivRNADNA[1:10,1:6], row.names=FALSE, caption="Differentially-Expressed Driver Gene Sets from RNA and DNA drivers")
+  
+drugRNADNA <- panDrugSets(drivRNADNA,caseids=patient, controlids=ptmatch,
+                  gcount=gcSim, gene.gs=reactome.gs, gene.adj=reactome.adj,
+                  drug.gs=dgi.gs, drug.adj=dgi.adj,
+                  minPathways=0, nsim=set.nsim, tailEnd=set.tailEnd)  
+
+kable(drugRNADNA[1:15,1:10], row.names=FALSE, digits=3, caption="Drug Test Results")
+       
+```
+
+Using Gene Panels
+====================
+
+Next we provide an example for how a subset of genes, e.g., a panel set, could be used in PANOPLY.
+We generate a random subset of 1000 network genes, and make a new adjacency matrix from those based on
+the adjacenty matrix we provided. However, a user can provide their own adjacency matrix to be
+just like the one we created.  To make sure to get sufficient mixture of driver genes, we now set
+eventOnly=FALSE, which means to test all remaining driver gene networks in the panGeneSets function, which
+are then used in panDrugSets.
+
+```{r, panelgenes, echo=TRUE, eval=TRUE}
+set.seed(1000)
+panel.genes <- sample(colnames(reactome.adj), size=1000, replace=FALSE)
+panel.adj <- reactome.adj[,panel.genes]
+panel.adj <- panel.adj[rowSums(panel.adj)>0,]
+dim(panel.adj)
+ 
+drivPanel <- panGeneSets(caseids=patient, controlids=ptmatch,
+                   gcount=gcSim, cna=cnSim, tailPct=set.tailPct,
+                   gene.adj=panel.adj, drug.adj=dgi.adj,
+                   tailEnd=set.tailEnd, eventOnly=FALSE)
+kable(drivPanel[1:10,1:6], digits=3, row.names=FALSE, caption="DE Driver Gene Sets from Panel Set, RNA + DNA")
+
+drugPanel <- panDrugSets(drivPanel, caseids=patient, controlids=ptmatch,
+                   gcount=gcSim, gene.gs=reactome.gs, gene.adj=panel.adj,
+                   drug.gs=dgi.gs, drug.adj=dgi.adj, minPathways=0,
+                   nsim=set.nsim, tailEnd=set.tailEnd)  
+kable(drugPanel[1:10,1:10], digits=3, row.names=FALSE, caption="Drug Test Results from Gene Panel")                  
+ 
+```
+
+Other Gene Sets
+=====================
+
+Below we give a brief explanation of how we picked gene sets to be targeted by a single drug, Olaparib, in
+the initial manuscript for PANOPLY. 
+
+## Olaparib Gene Set A 
+
+The genes in TPR simulation set A are the direct targets of the drug Olaparib, which
+is annotated and used within PANOPLY. The genes targeted by any drug can be found
+using the same two lines of code.
+
+```{r, showGenesA, eval=TRUE, echo=TRUE, results='asis'}
+pickGenesA <- dgi.gs[[pickDrug]]
+pickGenesA <- pickGenesA[pickGenesA %in% colnames(reactome.adj)]
+kable(data.frame(Genes.SetA=pickGenesA))
+```
+
+## Olaparib Gene Set B
+
+The genes in TPR simulation set B are the genes annotated as directly affected by BRCA2, which
+is a target of Olaparib. So the four genes being over-expressed is like BRCA2 being turned on,
+causing the over-expression, and that Olaparib would target that sub-network, including
+BRCA2 itself. The set defined directly from the gene adjacency matrix.
+
+```{r, showGenesB, eval=TRUE, echo=TRUE, results='asis'}
+pickGenesB <- names(which(reactome.adj["BRCA2",]>0))
+kable(data.frame(Genes.SetB=pickGenesB))
+```
+
+## Olaparib Gene Set C
+
+The genes selected for set C is not as easily defined from annotation as sets
+A and B above. We aimed to have a gene set of similar size as set A (5 total),
+but also affecting downstream genes within multiple sub-networks that are
+targeted by Olaparib. We show below the genes in set C (7 total),  followed
+by the cancer driver genes that are upstream of three or more of the set C genes.
+
+```{r, showGenesC, eval=TRUE, echo=TRUE, results='asis'}
+pickGenesC <- c("BRCA1","RAD21","FANCG","FANCI","SUMO2","H2AFX","ATM")
+kable(data.frame(Genes.SetC=pickGenesC))
+
+DriversC=names(which(rowSums(reactome.adj[,pickGenesC])>2))
+kable(data.frame(Drivers.SetC=DriversC), caption="Cancer Driver Genes that target 3 or more genes from set C")
+```
+
+## Session Information
+
+For reproducibility, we provide session information.
+
+```{r, rsession}
+sessionInfo()
+```
+
+
+
