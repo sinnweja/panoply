@@ -1,6 +1,6 @@
 # PANOPLY: *P*recision C*a*ncer Ge*no*mic Re*p*ort: Single Samp*l*e Inventor*y*
 
-Panoply is an R package that is part of a workflow to create reports to match cancer drugs to a patient's tumor using genomic data. The method can be applied to multiple cancer types.
+Panoply is an R package that is part of a workflow to create reports to match cancer drugs to a patient's tumor using genomic data. The method can be applied to multiple cancer types. Our team's software development page contains more information and other tools here: http://kalarikrlab.org/Software/Panoply.html
 
 # Datasets
 
@@ -14,4 +14,4 @@ The primary functions unique to panoply are *panGeneSets* and *panDrugSets*.  Th
  
 # Vignettes
 
-We provide example vignettes for each of the COAD and TNBC cancer datasets, which are in Sweave format.  We also provide a vignette for how we use multiple drug-gene annotation sources to build the drug-gene datasets within the vignette titled *buildDrugSets*.
+We provide two vignettes that are built with the package: 1) *panoplyManual*, a user manual that describes some of the settings suggested for running *panGeneSets* and *panDrugSets*, in addition to some details for howe simulated date to test the methods; and 2) *buildDrugSets* has instructions for how we use multiple drug-gene annotation sources to build the drug-gene datasets.  Additionally, we provide two example Sweave-format scripts in the vignette directory, for each of the COAD and TNBC cancer datasets. We do not include them as vignettes in the package, but the reports are posted on our web site.

@@ -1,5 +1,12 @@
 \name{NEWS}
 \title{NEWS file for the panoply package}
+\section{Changes in version 0.98}{
+  \itemize{
+    \item Add panoplyManual vignette
+    \item Specify DNT.pval and DMT.pval columns from panDrugSets
+    \item Available on http://kalarikrlab.org/Software/Panoply.html
+  }
+}
 \section{Changes in version 0.97}{
   \itemize{
     \item Took out all instances of the permutation-based test
