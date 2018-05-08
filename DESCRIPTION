@@ -13,7 +13,8 @@ Authors@R: c(
 Description: Personalized Cancer Report with prioritizing cancer drugs by the genomic networks they target.
 Suggests:
 	xtable,
-	knitr
+	knitr,
+	rmarkdown
 Depends:
 	R (>= 3.2.0),
 	stats,

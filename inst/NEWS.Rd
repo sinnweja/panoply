@@ -4,6 +4,8 @@
   \itemize{
     \item Add panoplyManual vignette
     \item Specify DNT.pval and DMT.pval columns from panDrugSets
+    \item Added arguments to panGeneSets and panDrugSets that allow user
+          to pass gene and drug network annotation datasets.
     \item Available on http://kalarikrlab.org/Software/Panoply.html
   }
 }
@@ -12,7 +14,7 @@
     \item Took out all instances of the permutation-based test
     \item Uploaded to github
     \item Added a vignette and code steps in the vignette for building
-    drug-gene annotation datasets
+    drug-gene annotation datasets: buildDrugSets
     \item Add CADD variant scores to an additional version of variantPanTNBC
   }
 }

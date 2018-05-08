@@ -484,9 +484,10 @@ given to random forest, and we select \Sexpr{nrow(RFimp)} genes to help make sen
 \end{figure}
 \clearpage
 
-<<runGeneSets, echo=FALSE>>=
+<<runGeneSets, echo=FALSE, results=tex>>=
 ## build drug gene set and adjacency objects
 data(drugdbPan)
+print(xtable(drugdbPan[1:10,], caption="Drug Database File Format"))
 drugObjects <- annotateDrugs(drugdbPan)
 drug.gs <- drugObjects[[1]]
 drug.adj <- drugObjects[[2]]
@@ -545,15 +546,15 @@ png(ptcircos,height=8, width=8, units='in', res=300)
 set.seed(1000)
                                   
 panCircos(drivGenes, drugTable[drugTable$N.Pathways>6,], caseids=patient,  variant=variantPanTNBC, cnaPanTNBC, gcount=gcPanTNBC, gcinfo=gcinfoPan,
-      tailEnd=tailEnd,tailPct=tailPct, minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=minPathSize)
+    tailEnd=tailEnd,tailPct=tailPct, minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=minPathSize)
 
 invisible(dev.off())
 ptgraph <- paste0("graph",patient,".png")
-png(ptgraph,height=8, width=8, units='in', res=300) 
-set.seed(1000)
-panGeneGraph(drivGenes, drugTable, ndrugs=4,ndrivers=40, minPathways=4)
+#png(ptgraph,height=8, width=8, units='in', res=300) 
+#set.seed(1000)
+#panGeneGraph(drivGenes, drugTable, ndrugs=4,ndrivers=40, minPathways=4)
 #panGraph(drivDrug.Filtered, id=patient, gcount=gcPanTNBC, tailPct=.4, tailEnd="both")
-invisible(dev.off())
+#invisible(dev.off())
 
 if(FALSE){
 save(list=c("drivGenes","drivDrug.Filtered","drugTable","ptmatch"),file=paste("panoply.",unlist(strsplit(patient,"-"))[[3]],".RData",sep=""))
@@ -638,8 +639,7 @@ xpathTable$Drug <- paste0("\\href{http://dgidb.genome.wustl.edu/drugs/",xpathTab
 
 \subsection*{Visualization}
 
-We take two views of the patient's druggable gene targets and their networks.  
-First we show a circos plot of the driver gene events in outer bands, and gene expression events in the inner bands, colored blue if they are over- or under-expressed, and if one of the key drugs target them. Across the center circle, we show genes that are connected as the top cancer drivers connected to their druggable in-network genes.
+We show a circos plot of the driver gene events in outer bands, and gene expression events in the inner bands, colored blue if they are over- or under-expressed, and if one of the key drugs target them. Across the center circle, we show genes that are connected as the top cancer drivers connected to their druggable in-network genes.
 
 \begin{figure}[h]
   \begin{center}
@@ -650,34 +650,23 @@ First we show a circos plot of the driver gene events in outer bands, and gene e
 \end{figure}
 \clearpage
 
-Next we show in a gene graph in Figure~\ref{figGraph} the driver gene networks for this patient that distinguishes their 
-tumor genomic activity as over-expressed as a likely direct result of the driver event within pathways.
-\begin{figure}[h]
-  \begin{center}
- \includegraphics[width=14cm, height=10cm]{\Sexpr{ptgraph}} 
-\caption{Patient-specific cancer gene graph network}
-  \label{figGraph}
-   \end{center}
-\end{figure}
-\clearpage
-
 Drug Network View
 
 <<drugview, echo=FALSE>>=
 #source("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/analyses/manuscripts/panoply/panoply-build/R/panGraph.R")
 drugnetpt <- paste0("drugNetwork",patient, ".png")
-png(drugnetpt,height=15, width=18, units='cm', res=300)
-panDrugGraph(drugTable[drugTable$N.Pathways>6,], ndrugs=4)
-## minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=minPathSize, pathSource="reactome")
-invisible(dev.off())
+#png(drugnetpt,height=15, width=18, units='cm', res=300)
+#panDrugGraph(drugTable[drugTable$N.Pathways>6,], ndrugs=4)
+### minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=minPathSize, pathSource="reactome")
+#invisible(dev.off())
 @ 
-\begin{figure}[h]
-  \begin{center}
- \includegraphics[width=27cm, height=21cm]{\Sexpr{drugnetpt}} 
- \caption{Drugs that target the most network genes and the affected pathways}
-   \end{center}
-\end{figure}
-\clearpage
+%\begin{figure}[h]
+%  \begin{center}
+% \includegraphics[width=27cm, height=21cm]{\Sexpr{drugnetpt}} 
+% \caption{Drugs that target the most network genes and the affected pathways}
+%   \end{center}
+%\end{figure}
+%\clearpage
 
 <<resetOptions, echo=FALSE>>=
 options(warn=userWarnOpt)

@@ -92,6 +92,7 @@ library(panoply)
 library(randomForest)
 library(RColorBrewer)
 library(Rgraphviz)
+library(xtable)
 data(clinPanCO)
 data(genelistPan)
 data(cnaPanCO)
@@ -478,13 +479,51 @@ panCircos(drivGenes, drugTable[drugTable$N.Pathways>6,], caseids=patient,  varia
 
 invisible(dev.off())
 ptgraph <- paste0("graph",patient,".png")
-png(ptgraph,height=8, width=8, units='in', res=300) 
-set.seed(1000)
-panGeneGraph(drivGenes, drugTable, ndrugs=4,ndrivers=40, minPathways=4)
+#png(ptgraph,height=8, width=8, units='in', res=300) 
+#set.seed(1000)
+#panGeneGraph(drivGenes, drugTable, ndrugs=4,ndrivers=40, minPathways=4)
 #panGraph(drivDrug.Filtered, id=patient, gcount=gcPanCO, tailPct=.4, tailEnd="both")
-invisible(dev.off())
+#invisible(dev.off())
 
 if(FALSE){
+ panGeneGraph <- function (panGene, panDrug, minTargets = 2, minPathways = 2, 
+    ndrugs = 4, ndrivers = 20, ...)  {
+    requireNamespace("Rgraphviz")
+    data(react.graph)
+    drTable <- panDrug[with(panDrug, !is.na(N.Pathways) & N.Pathways >= 
+        minPathways & !is.na(N.Network.Genes) & N.Network.Genes >= minTargets), ]
+    drTable <- drTable[!duplicated(drTable[, c("Cancer.Genes", "Network.Genes")]), ]
+    drTable <- drTable[1:max(2, min(nrow(drTable), ndrugs)),  ]
+    drTable$AllGenes <- gsub(",$", "", gsub("^,", "", paste(drTable$Cancer.Genes, 
+        drTable$Network.Genes, sep = ",")))
+    drGeneList <- strsplit(drTable$AllGenes, split = ",")
+    names(drGeneList) <- drTable$Drug
+    drugGenes <- unique(unlist(strsplit(drTable$AllGenes, split = ",")))
+    zdr <- panGene$Cancer.Gene[1:ndrivers]
+    zexpr <- drugGenes[drugGenes %in% drTable$Network.Genes]
+    zconn <- unlist(strsplit(panGene$NetGenes, split = ","))
+    zconn <- zconn[zconn %in% drugGenes]
+    sg1 <- subGraph(unique(c(zdr, zconn)), react.graph)
+    sgAttrs <- list()
+    zdr.target <- panGene$Cancer.Gene[panGene$Cancer.Gene %in% zexpr]
+    sgAttrs$fillcolor = rep(rgb(128/256, 177/256, 211/256), length(nodes(sg1)))
+    names(sgAttrs$fillcolor) = nodes(sg1)
+    sgAttrs$fillcolor[intersect(zdr, nodes(sg1))] = rgb(251/256, 
+        128/256, 114/256)
+    sgAttrs$shape = rep("box", length(nodes(sg1)))
+    names(sgAttrs$shape) = nodes(sg1)
+    sgAttrs$shape[unique(c(zconn, zdr.target))] = "circle"
+    sgAttrs$shape[intersect(zdr.target, nodes(sg1))] = "ellipse"
+    sgAttrs$fontsize = rep(25, length(nodes(sg1)))
+    names(sgAttrs$fontsize) = nodes(sg1)
+    sgAttrs$height = rep(1.5, length(nodes(sg1)))
+    names(sgAttrs$height) = nodes(sg1)
+    sgAttrs$width = rep(2.2, length(nodes(sg1)))
+    names(sgAttrs$width) = nodes(sg1)    
+    plot(sg1, nodeAttrs = sgAttrs, main = "Cancer Driver Network:\n red=drivers, blue=network \n circles=druggable, ellipse=expressed druggable drivers")
+}
+  
+  
 save(list=c("drivGenes","drivDrug.Filtered","drugTable","ptmatch"),file=paste("panoply.",unlist(strsplit(patient,"-"))[[3]],".RData",sep=""))
 require(WriteXLS)
 WriteXLS(x=c("drivGenes","drivDrug.Filtered","drugTable","pathTable","drivdf"), 
@@ -567,8 +606,7 @@ xpathTable$Drug <- paste0("\\href{http://dgidb.genome.wustl.edu/drugs/",xpathTab
 
 \subsection*{Visualization}
 
-We take two views of the patient's druggable gene targets and their networks.  
-First we show a circos plot of the driver gene events in outer bands, and gene expression events in the inner bands, colored blue if they are over- or under-expressed, and if one of the key drugs target them. Across the center circle, we show genes that are connected as the top cancer drivers connected to their druggable in-network genes.
+We show a circos plot of the driver gene events in outer bands, and gene expression events in the inner bands, colored blue if they are over- or under-expressed, and if one of the key drugs target them. Across the center circle, we show genes that are connected as the top cancer drivers connected to their druggable in-network genes.
 
 \begin{figure}[h]
   \begin{center}
@@ -579,20 +617,9 @@ First we show a circos plot of the driver gene events in outer bands, and gene e
 \end{figure}
 \clearpage
 
-Next we show in a gene graph in Figure~\ref{figGraph} the driver gene networks for this patient that distinguishes their 
-tumor genomic activity as over-expressed as a likely direct result of the driver event within pathways.
-\begin{figure}[h]
-  \begin{center}
- \includegraphics[width=14cm, height=10cm]{\Sexpr{ptgraph}} 
-\caption{Patient-specific cancer gene graph network}
-  \label{figGraph}
-   \end{center}
-\end{figure}
-\clearpage
+%Frug Network View
 
-Drug Network View
-
-<<drugview, echo=FALSE>>=
+<<drugview, echo=FALSE, eval=FALSE>>=
 #source("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/analyses/manuscripts/panoply/panoply-build/R/panGraph.R")
 drugnetpt <- paste0("drugNetwork",patient, ".png")
 png(drugnetpt,height=15, width=18, units='cm', res=300)
@@ -600,13 +627,14 @@ panDrugGraph(drugTable[drugTable$N.Pathways>6,], ndrugs=4)
 ## minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=minPathSize, pathSource="reactome")
 invisible(dev.off())
 @ 
-\begin{figure}[h]
-  \begin{center}
- \includegraphics[width=27cm, height=21cm]{\Sexpr{drugnetpt}} 
- \caption{Drugs that target the most network genes and the affected pathways}
-   \end{center}
-\end{figure}
-\clearpage
+
+%\begin{figure}[h]
+%  \begin{center}
+% \includegraphics[width=27cm, height=21cm]{\Sexpr{drugnetpt}} 
+% \caption{Drugs that target the most network genes and the affected pathways}
+%   \end{center}
+%\end{figure}
+%\clearpage
 
 <<resetOptions, echo=FALSE>>=
 options(warn=userWarnOpt)

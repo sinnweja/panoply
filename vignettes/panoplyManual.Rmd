@@ -1,7 +1,6 @@
-
 ---
 title: "PANOPLY User Manual"
-author: "Jason Sinnwell"
+author: "Jason Sinnwell, Erin Carlson, K. Rani Kalari"
 date: '`r format(Sys.time(),"%d %B, %Y")`'
 output:
   rmarkdown::html_vignette:
@@ -13,9 +12,12 @@ vignette: |
   %\VignetteEngine{knitr::rmarkdown}
 ---
 
+```{r, echo = FALSE}
+options(width = 100)
 
-Introduction:
-===============
+```
+
+# Introduction
 
 This document shows the general steps used to run the tests 
 true positive rates (TPR) in the PANOPLY manuscript. The steps use the covariance
@@ -27,7 +29,7 @@ that are targets of cancer drugs, we include DNA copy number events in specific 
 and at random. The results from the complete simulations of 500 datasets (nsim=500)
 from each setting are summarized in the PANOPLY manuscript and supplementary methods.
 
-## Setup
+# Setup
 
 The first code chunk describes how we created the document using R-markdown, and loads the
 necessary R packages.
@@ -65,9 +67,6 @@ data(reactome)
 data(dgiSets)
 
 ```
-
-Examples
-==============
 
 ## Simulation Settings
 
@@ -120,8 +119,9 @@ set.eventOnly=TRUE     ## in DMT, only use RNA+DNA driver events, if FALSE, uses
 set.nsim=100           ## n-simulations for DMT p-value. We suggest using 1000 or more, but fewer here for run-time.
 ```
 
-RNA Drivers Only
-====================
+# Examples
+
+## RNA Drivers Only
 
 We first ignore the DNA driver events and only analyze the RNA over-expressed
 genes for the simulated "case" as the driver events.  We show the DNT and DMT
@@ -162,8 +162,7 @@ kable(drugRNA[1:15,1:10], row.names=FALSE, digits=3, caption="Drug Test Results,
   
 ```
 
-DNA Network Drivers 
-===============================================
+## DNA Network Drivers 
 
 We now add DNA driver events to "turn on" the neighboring genes of cancer driver
 genes. Since internally the functions treat variant and copy number events equally
@@ -200,8 +199,7 @@ kable(drugRNADNA[1:15,1:10], row.names=FALSE, digits=3, caption="Drug Test Resul
        
 ```
 
-Using Gene Panels
-====================
+## Using Gene Panels
 
 Next we provide an example for how a subset of genes, e.g., a panel set, could be used in PANOPLY.
 We generate a random subset of 1000 network genes, and make a new adjacency matrix from those based on
@@ -231,8 +229,7 @@ kable(drugPanel[1:10,1:10], digits=3, row.names=FALSE, caption="Drug Test Result
  
 ```
 
-Other Gene Sets
-=====================
+# Other Gene Sets
 
 Below we give a brief explanation of how we picked gene sets to be targeted by a single drug, Olaparib, in
 the initial manuscript for PANOPLY. 
@@ -277,7 +274,7 @@ DriversC=names(which(rowSums(reactome.adj[,pickGenesC])>2))
 kable(data.frame(Drivers.SetC=DriversC), caption="Cancer Driver Genes that target 3 or more genes from set C")
 ```
 
-## Session Information
+# Session Information
 
 For reproducibility, we provide session information.
 
