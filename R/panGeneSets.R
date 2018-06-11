@@ -25,8 +25,8 @@ panGeneSets <- function(caseids, controlids, variant=NULL, cna=NULL, gcount, tum
     drug.adj <- dgi.adj
   }
   ## call panConnect, then panGeneDruggable
-  pconn <- panConnect(caseids, controlids, variant=variant, cna=cna, gcount=gcount, tumorpct=tumorpct, tailPct=tailPct, tailEnd=tailEnd, eventOnly=eventOnly, gageCompare=gageCompare)
-  pgene <- panGeneDruggable(pconn, gcount=gcount, caseids=caseids, tailPct=tailPct, tailEnd=tailEnd)
+  pconn <- panConnect(caseids, controlids, variant=variant, cna=cna, gcount=gcount, tumorpct=tumorpct, tailPct=tailPct, tailEnd=tailEnd, eventOnly=eventOnly, gene.adj=gene.adj, gageCompare=gageCompare)
+  pgene <- panGeneDruggable(pconn, gcount=gcount, caseids=caseids, tailPct=tailPct, tailEnd=tailEnd, gene.adj=gene.adj, drug.adj=drug.adj)
   return(pgene)
 }
   

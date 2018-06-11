@@ -3,6 +3,8 @@
 \section{Changes in version 0.98}{
   \itemize{
     \item Add panoplyManual vignette
+    \item Ensure user-defined gene and drug sets passed through to internal
+    functions for panGeneSets
     \item Specify DNT.pval and DMT.pval columns from panDrugSets
     \item Added arguments to panGeneSets and panDrugSets that allow user
           to pass gene and drug network annotation datasets.
