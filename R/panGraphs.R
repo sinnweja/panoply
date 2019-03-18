@@ -3,7 +3,7 @@
 ## Graph networks of pan-connect plot
 panGeneGraph <- function(panGene, panDrug, minTargets=2, minPathways=2, ndrugs=4, ndrivers=20, ...) {
   ## g count
-  requireNamespace("Rgraphviz")
+  require(Rgraphviz)
   data(react.graph)
  
   ## load("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/applications/Rlib/panoply/data/graphNEL_ad.RData")

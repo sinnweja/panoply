@@ -1,3 +1,4 @@
+
 # PANOPLY: *P*recision C*a*ncer Ge*no*mic Re*p*ort: Single Samp*l*e Inventor*y*
 
 Panoply is an R package that is part of a workflow to create reports to match cancer drugs to a patient's tumor using genomic data. The method can be applied to multiple cancer types. Our team's software development page contains more information and other tools here: http://kalarikrlab.org/Software/Panoply.html
