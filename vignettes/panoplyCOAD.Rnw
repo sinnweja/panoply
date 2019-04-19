@@ -87,7 +87,8 @@ Tumor-specific drug targets for the patient can be found with the following step
 
 <<setup2,echo=FALSE>>=
 #.libPaths(c("~/R/x86_64-unknown-linux-gnu-library/3.4/",.libPaths()))
-.libPaths(c("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/applications/Rlib342", .libPaths()))
+.libPaths(c("/research/bsi/projects/PI/tertiary/Kalari_Krishna_m040140/s207431.PROMISE/applications/Rlib352", .libPaths()))
+library(gage)
 library(panoply)
 library(randomForest)
 library(RColorBrewer)
@@ -102,11 +103,11 @@ data(gcinfoPan)
 #data(dgidbPan)
 data(drugdbPan)
 data(reactome)
-#data(dgiSets)
+data(dgiSets)
 #data(dgiBCPan)
 #data(esnvPanTNBC)
 #load("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/analyses/manuscripts/panoply/panpkg/data/dgiCancerPan.RData")
-data(reactome)
+#data(reactome)
 
 #load
 drivergenes <- genelistPan$GeneSymbol[genelistPan$AllLists & genelistPan$reactome]
@@ -124,7 +125,7 @@ addtorow <- list(pos=list(-1,0),
 \section{Clinical Data}
 
 <<clinical, echo=FALSE, eval=TRUE, results=tex>>=
-clinPanCO$Days_Followup<- ifelse(clinPanCO$vital_status=="DECEASED",clinPanCO$days_to_death,
+clinPanCO$Days_Followup <- ifelse(clinPanCO$vital_status=="DECEASED",clinPanCO$days_to_death,
                           ifelse(clinPanCO$vital_status=="LIVING",clinPanCO$days_to_last_followup,NA))
 clin <- clinPanCO[clinPanCO$bcr_patient_barcode==patient,]
 @ 
@@ -148,8 +149,8 @@ for whom this report is generated.
 
 \renewcommand{\tabcolsep}{0.1cm}
 <<matchedClin, results=tex, echo=FALSE>>=
-match.index <- which(clinPanCO$bcr_patient_barcode %in% c("TCGA-AZ-4315","TCGA-A6-3808","TCGA-CM-4747","TCGA-A6-3810","TCGA-CM-4748"))
-#match.index <- which(clinPanCO$Vital.Status=="Alive" & clinPanCO$PatientID!=patient & clinPanCO$age_at_diagnosis>60 & clinPanCO$age_at_diagnosis<=70 & clinPanCO$T.stage >= 2 & clinPanCO$N.stage != "N2" & clinPanCO$ndays > 1000)
+#match.index <- which(clinPanCO$bcr_patient_barcode %in% c("TCGA-AZ-4315","TCGA-A6-3808","TCGA-CM-4747","TCGA-A6-3810","TCGA-CM-4748"))
+match.index <- which(clinPanCO$vital_status %in% "LIVING") #=="Alive" & clinPanCO$PatientID!=patient & clinPanCO$age_at_diagnosis>60 & clinPanCO$age_at_diagnosis<=70 & clinPanCO$T.stage >= 2 & clinPanCO$N.stage != "N2" & clinPanCO$ndays > 1000)
 
 matchcols <- c("bcr_patient_barcode","vital_status","age_at_initial_pathologic_diagnosis","Days_Followup","tumor_stage","lymphatic_invasion","number_of_first_degree_relatives_with_cancer_diagnosis")
                 
@@ -178,7 +179,7 @@ targets. The events we report may be any of these for a gene in the list of targ
 #data(DNAtumorpct)
 #load("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/analyses/manuscripts/panoply/data/cnaPan.RData")
 #pct.dna <- clin$tumorpct
-tumorpct.clin <- clin$tumorpct
+#tumorpct.clin <- clin$tumorpct
 #pct.dna <- .4
 cncut1 <- log2((2*(1-pct.dna)+1*pct.dna)/2)
 cncut3 <- log2((2*(1-pct.dna)+3*pct.dna)/2)
@@ -416,13 +417,14 @@ given to random forest, and we select \Sexpr{nrow(RFimp)} genes to help make sen
 
 <<runGeneSets, echo=FALSE>>=
 ## build drug gene set and adjacency objects
-data(drugdbPan)
-drugObjects <- annotateDrugs(drugdbPan)
-drug.gs <- drugObjects[[1]]
-drug.adj <- drugObjects[[2]]
-
+#data(drugdbPan)
+#drugObjects <- annotateDrugs(drugdbPan)
+#drug.gs <- drugObjects[[1]]
+#drug.adj <- drugObjects[[2]]
+drug.gs=dgi.gs
+drug.adj=dgi.adj
 ## pass reactome adjacency matrix (pre-built) to panGeneSets
-data(reactome)
+options(stringsAsFactors=FALSE)
 drivGenes <- panGeneSets(caseid=patient, controlid=ptmatch, eventOnly=drivEventOnly, variant=NULL, cna=cnaPanCO, gcount=gcPanCO, tumorpct=pct.dna, tailEnd=tailEnd, tailPct=tailPct, gene.adj=reactome.adj, drug.adj=drug.adj)
 
 ## filter to best set, and order by p-values
@@ -448,7 +450,7 @@ drivDrug.Filtered <- drivDrug.Filtered[with(drivDrug.Filtered,order(Network.pval
 #drugTable <- panDrugTable(drivDrug.Filtered, minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=minPathSize)
 
 set.seed(1000)
-drugTable <- panDrugSets(drivGenes, caseids=patient, controlids=ptmatch, gcount=gcPanCO,nsim=1000, gene.gs=reactome.gs, gene.adj=reactome.adj, drug.gs=drug.gs, drug.adj=drug.adj, tailEnd=tailEnd)
+drugTable <- panDrugSets(drivGenes, caseids=patient, controlids=ptmatch, gcount=gcPanCO,nsim=1000, gene.gs=reactome.gs, gene.adj=reactome.adj, drug.adj=drug.adj, tailEnd=tailEnd) #drug.gs=drug.gs)
 
 ## add RF.score
 drugTable$RF.Score <- 0
@@ -474,62 +476,25 @@ png(ptcircos,height=8, width=8, units='in', res=300)
 #source("../R/panCircos.R")
 set.seed(1000)
                                   
-panCircos(drivGenes, drugTable[drugTable$N.Pathways>6,], caseids=patient,  variant=NULL, cnaPanCO, gcount=gcPanCO, gcinfo=gcinfoPan,
-      tailEnd=tailEnd,tailPct=tailPct, minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=)
+panCircos(drivGenes, drugTable[drugTable$N.Pathways>6,], caseids=patient,  
+      variant=NULL, cnaPanCO, gcount=gcPanCO, gcinfo=gcinfoPan,
+      tailEnd=tailEnd,tailPct=tailPct, minTargets=minDrugTargets, minPathPct=minPathPct, minPathSize=10)
 
 invisible(dev.off())
-ptgraph <- paste0("graph",patient,".png")
-#png(ptgraph,height=8, width=8, units='in', res=300) 
-#set.seed(1000)
-#panGeneGraph(drivGenes, drugTable, ndrugs=4,ndrivers=40, minPathways=4)
-#panGraph(drivDrug.Filtered, id=patient, gcount=gcPanCO, tailPct=.4, tailEnd="both")
-#invisible(dev.off())
 
-if(FALSE){
- panGeneGraph <- function (panGene, panDrug, minTargets = 2, minPathways = 2, 
-    ndrugs = 4, ndrivers = 20, ...)  {
-    requireNamespace("Rgraphviz")
-    data(react.graph)
-    drTable <- panDrug[with(panDrug, !is.na(N.Pathways) & N.Pathways >= 
-        minPathways & !is.na(N.Network.Genes) & N.Network.Genes >= minTargets), ]
-    drTable <- drTable[!duplicated(drTable[, c("Cancer.Genes", "Network.Genes")]), ]
-    drTable <- drTable[1:max(2, min(nrow(drTable), ndrugs)),  ]
-    drTable$AllGenes <- gsub(",$", "", gsub("^,", "", paste(drTable$Cancer.Genes, 
-        drTable$Network.Genes, sep = ",")))
-    drGeneList <- strsplit(drTable$AllGenes, split = ",")
-    names(drGeneList) <- drTable$Drug
-    drugGenes <- unique(unlist(strsplit(drTable$AllGenes, split = ",")))
-    zdr <- panGene$Cancer.Gene[1:ndrivers]
-    zexpr <- drugGenes[drugGenes %in% drTable$Network.Genes]
-    zconn <- unlist(strsplit(panGene$NetGenes, split = ","))
-    zconn <- zconn[zconn %in% drugGenes]
-    sg1 <- subGraph(unique(c(zdr, zconn)), react.graph)
-    sgAttrs <- list()
-    zdr.target <- panGene$Cancer.Gene[panGene$Cancer.Gene %in% zexpr]
-    sgAttrs$fillcolor = rep(rgb(128/256, 177/256, 211/256), length(nodes(sg1)))
-    names(sgAttrs$fillcolor) = nodes(sg1)
-    sgAttrs$fillcolor[intersect(zdr, nodes(sg1))] = rgb(251/256, 
-        128/256, 114/256)
-    sgAttrs$shape = rep("box", length(nodes(sg1)))
-    names(sgAttrs$shape) = nodes(sg1)
-    sgAttrs$shape[unique(c(zconn, zdr.target))] = "circle"
-    sgAttrs$shape[intersect(zdr.target, nodes(sg1))] = "ellipse"
-    sgAttrs$fontsize = rep(25, length(nodes(sg1)))
-    names(sgAttrs$fontsize) = nodes(sg1)
-    sgAttrs$height = rep(1.5, length(nodes(sg1)))
-    names(sgAttrs$height) = nodes(sg1)
-    sgAttrs$width = rep(2.2, length(nodes(sg1)))
-    names(sgAttrs$width) = nodes(sg1)    
-    plot(sg1, nodeAttrs = sgAttrs, main = "Cancer Driver Network:\n red=drivers, blue=network \n circles=druggable, ellipse=expressed druggable drivers")
-}
+ptgraph <- paste0("graph",patient,".png")
+png(ptgraph,height=8, width=8, units='in', res=300) 
+#set.seed(1000)
+panGeneGraph(drivGenes, drugTable, ndrugs=4,ndrivers=40, minPathways=4)
+#panGraph(drivDrug.Filtered, id=patient, gcount=gcPanCO, tailPct=.4, tailEnd="both")
+invisible(dev.off())
   
-  
-save(list=c("drivGenes","drivDrug.Filtered","drugTable","ptmatch"),file=paste("panoply.",unlist(strsplit(patient,"-"))[[3]],".RData",sep=""))
-require(WriteXLS)
-WriteXLS(x=c("drivGenes","drivDrug.Filtered","drugTable","pathTable","drivdf"), 
-         ExcelFileName=paste0("panTables",patient,".xls"), 
-         SheetNames=c("Gene.Networks.Unfiltered","Gene.Networks.Filtered","Drug.Targets","Drug.Pathways","Driver.Genes"))
-}
+#save(list=c("drivGenes","drivDrug.Filtered","drugTable","ptmatch"),file=paste("panoply.",unlist(strsplit(patient,"-"))[[3]],".RData",sep=""))
+#require(WriteXLS)
+#WriteXLS(x=c("drivGenes","drivDrug.Filtered","drugTable","pathTable","drivdf"), 
+#         ExcelFileName=paste0("panTables",patient,".xls"), 
+#         SheetNames=c("Gene.Networks.Unfiltered","Gene.Networks.Filtered","Drug.Targets","Drug.Pathways","Driver.Genes"))
+
 @ 
 
 \subsection*{Gene-Network Targets}
@@ -611,15 +576,24 @@ We show a circos plot of the driver gene events in outer bands, and gene express
 \begin{figure}[h]
   \begin{center}
  \includegraphics[width=14cm, height=10cm]{\Sexpr{ptcircos}} 
-\caption{Key driver genomic events connected to gene expression events}
+\caption{Drugs targeting key driver genomic events connected to gene expression events}
   \label{figCircos}
    \end{center}
 \end{figure}
 \clearpage
 
-%Frug Network View
+Drug Network View
 
-<<drugview, echo=FALSE, eval=FALSE>>=
+\begin{figure}[h]
+  \begin{center}
+ \includegraphics[width=14cm, height=10cm]{\Sexpr{ptgraph}} 
+\caption{Key driver genomic events connected to gene expression events}
+  \label{figPanGene}
+   \end{center}
+\end{figure}
+\clearpage
+
+<<drugview, echo=FALSE, eval=TRUE>>=
 #source("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/analyses/manuscripts/panoply/panoply-build/R/panGraph.R")
 drugnetpt <- paste0("drugNetwork",patient, ".png")
 png(drugnetpt,height=15, width=18, units='cm', res=300)
@@ -628,13 +602,13 @@ panDrugGraph(drugTable[drugTable$N.Pathways>6,], ndrugs=4)
 invisible(dev.off())
 @ 
 
-%\begin{figure}[h]
-%  \begin{center}
-% \includegraphics[width=27cm, height=21cm]{\Sexpr{drugnetpt}} 
-% \caption{Drugs that target the most network genes and the affected pathways}
-%   \end{center}
-%\end{figure}
-%\clearpage
+\begin{figure}[h]
+  \begin{center}
+ \includegraphics[width=27cm, height=21cm]{\Sexpr{drugnetpt}} 
+ \caption{Drugs that target the most network genes and the affected pathways}
+   \end{center}
+\end{figure}
+\clearpage
 
 <<resetOptions, echo=FALSE>>=
 options(warn=userWarnOpt)

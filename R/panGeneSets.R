@@ -16,14 +16,20 @@
 
 panGeneSets <- function(caseids, controlids, variant=NULL, cna=NULL, gcount, tumorpct=0.5, tailPct=0.1, tailEnd="both", eventOnly=FALSE, gene.adj=NULL, drug.adj=NULL, gageCompare=ifelse(length(caseids)>1,"as.group","unpaired")) {
 
-  if(is.null(gene.adj)) {
+  if(is.null(gene.adj) || nrow(gene.adj)<10 | ncol(gene.adj) < 10) {
+    warning("missing or insufficient gene-gene adjacency matrix, using reactome")
     data(reactome)
     gene.adj <- reactome.adj
   }
-  if(is.null(drug.adj)) {
+  if(is.null(drug.adj) || nrow(drug.adj) < 4 | ncol(drug.adj) < 4 ) {
+    warning("missing or insufficient drug-gene adjacency matrix, using DGI matrix")
     data(dgiSets)
     drug.adj <- dgi.adj
   }
+  caseids <- caseids[caseids %in% colnames(gcount)]
+  if(length(caseids)<1) { stop("No caseids in gene counts") }
+  controlids <- controlids[controlids %in% colnames(gcount)]
+  if(length(controlids)<1) { stop("No controlids in gene counts")}
   ## call panConnect, then panGeneDruggable
   pconn <- panConnect(caseids, controlids, variant=variant, cna=cna, gcount=gcount, tumorpct=tumorpct, tailPct=tailPct, tailEnd=tailEnd, eventOnly=eventOnly, gene.adj=gene.adj, gageCompare=gageCompare)
   pgene <- panGeneDruggable(pconn, gcount=gcount, caseids=caseids, tailPct=tailPct, tailEnd=tailEnd, gene.adj=gene.adj, drug.adj=drug.adj)
@@ -125,6 +131,7 @@ outRNA <- function(ids, gcount, tailPct=0.1, tailEnd="both") {
     warning("tailPct argument should be < 0.5 and >0\n")
   }
   gcount <- gcount[order(rownames(gcount)),]
+
   if(tailEnd=="upper") {
     cutoff.subj <- apply(gcount, 2, function(x) { quantile(x, prob=1-tailPct)})
    
@@ -191,7 +198,7 @@ panConnect <- function(caseids, controlids, variant=NULL, cna=NULL, gcount, tumo
     
     kcase <- which(colnames(gcount) %in% caseids)
     kcontrol <- which(colnames(gcount) %in% controlids)
-#browser()                   
+                   
     gage.direct <- gage(gcount[,c(kcontrol,kcase)], gsets = list(gconnect),
                         ref = 1:length(kcontrol), same.dir=TRUE,set.size=c(1,500),
                         samp = (1+length(kcontrol)):(length(kcontrol)+length(kcase)),
@@ -218,7 +225,7 @@ panConnect <- function(caseids, controlids, variant=NULL, cna=NULL, gcount, tumo
     ## drivers$pval.less[k] <- gage.direct$greater[1,'p.val']
     ## gagedf <- data.frame(Cancer.Gene=rownames(gage.direct$greater), p.gage=gage.direct$greater[,'p.val'])
    
-    carriers <- strsplit(drivers$carrierlist[k], split=",")[[1]]
+    carriers <- strsplit(as.character(drivers$carrierlist)[k], split=",")[[1]]
     caseMut.ce <- rowSums(outMat[rownames(outMat) %in% carriers & rownames(outMat) %in% caseids,colnames(outMat) %in% gconnect,drop=FALSE])
     caseWT.ce <- rowSums(outMat[!(rownames(outMat) %in% carriers) & rownames(outMat) %in% caseids,colnames(outMat) %in% gconnect,drop=FALSE])
     controlMut.ce <- rowSums(outMat[rownames(outMat) %in% carriers & rownames(outMat) %in% controlids,colnames(outMat) %in% gconnect,drop=FALSE])

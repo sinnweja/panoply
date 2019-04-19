@@ -5,15 +5,12 @@ panGeneGraph <- function(panGene, panDrug, minTargets=2, minPathways=2, ndrugs=4
   ## g count
   require(Rgraphviz)
   data(react.graph)
- 
-  ## load("/data2/bsi/tertiary/Weinshilboum_Richard_weinsh/s112047.beauty/applications/Rlib/panoply/data/graphNEL_ad.RData")
 
   drTable <- panDrug[with(panDrug,!is.na(N.Pathways) & N.Pathways >= minPathways 
                      & !is.na(N.Network.Genes) & N.Network.Genes >= minTargets),]
   drTable <- drTable[!duplicated(drTable[,c("Cancer.Genes","Network.Genes")]),]
   drTable <- drTable[1:max(2,min(nrow(drTable),ndrugs)),]
-  ### drTable <- panDrugSets(panGene, caseids, controlids, gcount=gcount, minTargets=minTargets, minPathPct=minPathPct, minPathSize=minPathSize, minPathways=minPathways, nperm=500)
-  ##  drTable <- panDrugTable(pconn, minTargets=minTargets, minPathPct=minPathPct, minPathSize=minPathSize)
+
   drTable$AllGenes <- gsub(",$","",gsub("^,","",paste(drTable$Cancer.Genes, drTable$Network.Genes, sep=",")))
   drGeneList <- strsplit(drTable$AllGenes,split=",")
   names(drGeneList) <- drTable$Drug
@@ -57,8 +54,10 @@ panGeneGraph <- function(panGene, panDrug, minTargets=2, minPathways=2, ndrugs=4
   
   ## options are: circle (the default), ellipse, plaintext, and box
   ##png('DriverNetwork.png', height=6, width=6, units='in', res=300)
-  plot(sg1, nodeAttrs=sgAttrs,
+#browser()
+  graph::plot(sg1, nodeAttrs=sgAttrs,
        main="Cancer Driver Network:\n red=drivers, blue=network \n circles=druggable, ellipse=expressed druggable drivers")
+ # return(sg1)
 }
 
 
@@ -116,5 +115,5 @@ panDrugGraph <- function(panDrug,  usePathIDs=TRUE, ndrugs=8)  {
 
   sgAttrs$width=width2
   names(sgAttrs$width)=nodes(reg)
-  plot(reg, nodeAttrs=sgAttrs)
+  graph::plot(reg, nodeAttrs=sgAttrs)
 }

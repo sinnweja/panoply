@@ -8,28 +8,33 @@ panDrugSets <- function(panGene, caseids, controlids, gcount, minTargets=1, minP
              gageCompare = ifelse(length(caseids) > 1, "as.group", "unpaired")) {
 
   ## if drug and gene network data/sets not given, use data from package
-   if(is.null(drug.gs) | is.null(drug.adj)) {
-     warning("drug.gs or drug.adj not found, loading dgidb data...")
+   if(is.null(drug.adj) || nrow(drug.adj)<4 | ncol(drug.adj)<4) {
+     warning("missing or insufficient drug.adj, loading DGI data...")
      data(dgiSets)
-     drug.gs <- dgi.gs
+#     drug.gs <- dgi.gs
      drug.adj <- dgi.adj
    }
   
-   if(is.null(gene.gs) | is.null(gene.adj)) {
-     warning("gene.gs or gene.adj not found, loading reactome data...")
+   if(is.null(gene.adj) || nrow(gene.adj)<10 | ncol(gene.adj)<10) {    #is.null(gene.adj)) {
+     warning("missing or insufficient gene.adj, loading reactome adjacency from panoply")
      data(reactome)
      gene.adj <- reactome.adj
+
+   }
+   if(is.null(gene.gs) || length(gene.gs)<10) {    #is.null(gene.adj)) {
+     warning("missing or insufficient gene.gs object, loading reactome gene sets from panoply")
+     data(reactome)
      gene.gs <- reactome.gs
    }
-
    ## make sure drug sources agree
-   drug.adj <- drug.adj[rownames(drug.adj) %in% names(drug.gs),]
-   drug.gs <- drug.gs[rownames(drug.adj)]
-   uDrugs <- names(drug.gs)
+#   drug.adj <- drug.adj[rownames(drug.adj) %in% names(drug.gs),]
+#   drug.gs <- drug.gs[rownames(drug.adj)]
+   uDrugs <- rownames(drug.adj) # names(drug.gs)
    
    ## older function, still calculates ZTail.pval, and annotates pathways
    drugScores <- panDrugStouffers(panGene, nsim=nsim, tailEnd=tailEnd, minTargets=minTargets,
-         minPathPct=minPathPct, minPathSize=minPathSize, drug.gs=drug.gs, drug.adj=drug.adj, gene.gs=gene.gs, gene.adj=gene.adj)
+         minPathPct=minPathPct, minPathSize=minPathSize,  drug.adj=drug.adj, gene.adj=gene.adj, gene.gs=gene.gs)
+##drug.gs=drug.gs, drug.adj=drug.adj, gene.gs=gene.gs, gene.adj=gene.adj)
  
   drugConnect <- panDrugConnect(caseids=caseids, controlids=controlids, gcount=gcount, gageCompare=gageCompare, tailEnd=tailEnd, drug.adj=drug.adj)
   drugTable <- merge(drugScores, drugConnect,by.x="Drug", by.y="Drug", all.x=TRUE, all.y=TRUE)
@@ -44,10 +49,11 @@ panDrugSets <- function(panGene, caseids, controlids, gcount, minTargets=1, minP
 }
 
 panDrugStouffers <- function(panGene, nsim=1000, tailEnd="both", minTargets=1,
-                             minPathPct=.05, minPathSize=5, drug.gs, drug.adj, gene.gs, gene.adj) {
-  uDrugs <- names(drug.gs)
-  #uDrugs <- unique(c(unlist(strsplit(panGene$Drugs, split="/")),unlist(strsplit(panGene$NetDrugs, split="/"))))
-  #uDrugs <- uDrugs[!is.na(uDrugs) & nchar(uDrugs)>1]
+                             minPathPct=.05, minPathSize=5, drug.adj, gene.adj, gene.gs) { ##drug.gs, drug.adj, gene.adj) {
+  uDrugs <- rownames(drug.adj)
+#  uDrugs <- names(drug.gs)
+#  uDrugs <- unique(c(unlist(strsplit(panGene$Drugs, split="/")),unlist(strsplit(panGene$NetDrugs, split="/"))))
+#  uDrugs <- uDrugs[!is.na(uDrugs) & nchar(uDrugs)>1]
   drugsdf <- data.frame(Drug=uDrugs, N.Cancer.Genes=0,Cancer.Genes="", N.Network.Genes=0, Network.Genes="",
                         Z.Meta=0, ZSim.pval=1, N.Pathways=0, Pathways="")
 
@@ -61,13 +67,14 @@ panDrugStouffers <- function(panGene, nsim=1000, tailEnd="both", minTargets=1,
   zTest.sim <- matrix(0, nrow=nrow(drugsdf), ncol=nsim)
   ## taking out ZPerm p-value
   #zTest.perm <- matrix(0, nrow=nrow(drugsdf), ncol=nsim)
+  gtotal <-  sapply(gene.gs, length)
   for(dr in 1:nrow(drugsdf)) {   
     drividx <- grep(drugsdf[dr,"Drug"], panGene$Drugs)
     drugsdf[dr,"N.Cancer.Genes"] <- length(unique(panGene$Cancer.Gene[drividx]))
     drugsdf[dr,"Cancer.Genes"] <- paste(unique(panGene$Cancer.Gene[drividx]),sep=",",collapse=",")
 
     conngenes <- unique(unlist(strsplit(panGene[grep(drugsdf[dr,"Drug"], panGene$NetDrugs),"NetGenes"],split=",")))
- ##browser()
+ 
     if(length(conngenes)>0) {
       conngenes <- conngenes[conngenes %in% names(which(abs(drug.adj[dr, ])>0))]
       drugsdf[dr,"N.Network.Genes"] <- length(conngenes)
@@ -75,7 +82,6 @@ panDrugStouffers <- function(panGene, nsim=1000, tailEnd="both", minTargets=1,
     }    
     gset <- unique(c(panGene$Cancer.Gene[drividx], conngenes))
     gmatch <- sapply(gene.gs, function(x) sum(gset %in% x))
-    gtotal <- sapply(gene.gs, length)
     gpct <- signif(gmatch/gtotal,2)
 
     drpathidx <- which(gpct >= minPathPct & gtotal >= minPathSize)
@@ -83,10 +89,13 @@ panDrugStouffers <- function(panGene, nsim=1000, tailEnd="both", minTargets=1,
       drugsdf$N.Pathways[dr] <- length(drpathidx)
       drugsdf$Pathways[dr] <- paste(names(gene.gs)[drpathidx], collapse="; ")                                         
     }    
-
     
     drugName <- drugsdf[dr,"Drug"]
-    drugTargets <- drug.gs[[drugName]][which(drug.gs[[drugName]] %in% colnames(gene.adj))]
+
+    drugTargets <- names(drug.adj[drugName,which(drug.adj[drugName, ]>0)])
+    drugTargets <- drugTargets[drugTargets %in% colnames(gene.adj)]
+##    drugTargets.gs <- drug.gs[[drugName]][which(drug.gs[[drugName]] %in% colnames(gene.adj))]
+
     drugTargetNetworks <- rownames(gene.adj)[rowSums(gene.adj[,drugTargets,drop=FALSE])>0,drop=FALSE]
     dTN.ngenes <- rowSums(gene.adj[drugTargetNetworks,drugTargets,drop=FALSE])
     dTN.size <- rowSums(gene.adj[drugTargetNetworks,,drop=FALSE])
