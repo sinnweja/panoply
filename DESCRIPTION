@@ -1,7 +1,7 @@
 Package: panoply
 Title: Personalized Cancer Report
-Version: 0.999
-Date: 2019-04-02
+Version: 0.9999
+Date: 2019-08-07
 URL: http://kalarikrlab.org/Software/Panoply.html
 Authors@R: c(
     person("Jason", "Sinnwell", email = "sinnwell.jason@mayo.edu", role = c("aut", "cre")),
