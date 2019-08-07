@@ -258,7 +258,6 @@ panGeneDruggable <- function(pconn, gcount, caseids, tailPct=0.1, tailEnd="both"
   ## pconn: result from panPath
   ## gcount: data.frame of genecounts
   ## caseids: case ids to subset network genes to those that are outliers
-#  data(dgidbPan)
   if(is.null(gene.adj)) {
     data(reactome)
     gene.adj <- reactome.adj
@@ -268,7 +267,7 @@ panGeneDruggable <- function(pconn, gcount, caseids, tailPct=0.1, tailEnd="both"
     drug.adj <- dgi.adj
   }
   pdrug <- pconn
-  pdrug$Druggable <- ifelse(pdrug$Cancer.Gene %in% colnames(dgi.adj), 1, 0) ##dgidbPan$Gene, 1, 0)
+  pdrug$Druggable <- ifelse(pdrug$Cancer.Gene %in% colnames(drug.adj), 1, 0) ##dgidbPan$Gene, 1, 0)
 #  pdrug$ConnDruggable <- sapply(strsplit(pdrug$Case.PathGenes,split=","), function(x) sum(x %in% dgidbPan$Gene))
   pdrug$Network.Druggable <- pdrug$Total.Druggable <- 0
 #  pdrug$TotDruggable <- pdrug$DrivDruggable + pdrug$ConnDruggable
@@ -277,17 +276,15 @@ panGeneDruggable <- function(pconn, gcount, caseids, tailPct=0.1, tailEnd="both"
   pdrug$Drugs <- pdrug$NetDrugs <- pdrug$NetGenes <- ""
   outMat <- outRNA(ids=caseids, gcount, tailPct=tailPct, tailEnd=tailEnd)
   for(k in 1:nrow(pdrug)) {
-    pdrug[k,"Drugs"] <- paste(rownames(dgi.adj)[rowSums(dgi.adj[,which(colnames(dgi.adj) %in% pdrug[k,"Cancer.Gene"]),drop=FALSE])>0],collapse="/")
+    pdrug[k,"Drugs"] <- paste(rownames(drug.adj)[rowSums(drug.adj[,which(colnames(drug.adj) %in% pdrug[k,"Cancer.Gene"]),drop=FALSE])>0],collapse="/")
   
     ## get drugs for connected genes
     conngenes <- c(pdrug$Cancer.Gene[k],colnames(gene.adj)[gene.adj[pdrug$Cancer.Gene[k],]>0])
     conngenes <- conngenes[conngenes %in% colnames(outMat)[colSums(outMat)>0]]
     pdrug$NetGenes[k] <- paste(conngenes,collapse=",")
-    conndrugs <- paste(rownames(dgi.adj)[rowSums(dgi.adj[,which(colnames(dgi.adj) %in% conngenes),drop=FALSE])>0],collapse="/")
-          ##paste(dgidbPan$Drugs[dgidbPan$Gene %in% conngenes],sep="/")    
-    pdrug$Network.Druggable[k] <- sum(colnames(dgi.adj)[colSums(dgi.adj)>0] %in% conngenes)
-      ##  sum(dgidbPan$Gene %in% conngenes)
-      ##  pdrug$ConnGenes[k] <- ifelse(!is.null(conngenes),conngenes,"")
+    conndrugs <- paste(rownames(drug.adj)[rowSums(drug.adj[,which(colnames(drug.adj) %in% conngenes),drop=FALSE])>0],collapse="/")
+   
+    pdrug$Network.Druggable[k] <- sum(colnames(drug.adj)[colSums(drug.adj)>0] %in% conngenes)     
     pdrug$NetDrugs[k] <- ifelse(!is.null(conndrugs), conndrugs, "")
     pdrug$Total.Druggable[k] <- pdrug$Druggable[k] + pdrug$Network.Druggable[k]
   }
